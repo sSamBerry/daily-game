@@ -994,6 +994,31 @@ function RulesModal({ onClose }) {
   );
 }
 
+// Shown once, ever, the very first time someone opens the game (gated by a
+// localStorage flag) — a fast "what am I doing here" before they touch
+// anything. The full RulesModal covers everything else on demand.
+function IntroScreen({ onClose, onShowRules }) {
+  return (
+    <div
+      style={{ position: "fixed", inset: 0, zIndex: 210, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,0.7)" }}
+    >
+      <div className="bg-stone-800 border-2 border-stone-600 rounded-xl p-6 w-full max-w-xs mx-4 text-center" style={{ animation: "popIn 0.25s ease-out" }}>
+        <div className="rounded-sm mx-auto mb-4" style={{ width: 40, height: 40, background: "#f8fafc", boxShadow: "0 1px 2px rgba(0,0,0,0.25)" }} />
+        <p className="text-white font-black mb-2" style={{ fontSize: 20 }}>Save every building</p>
+        <p className="text-stone-300 font-bold text-sm mb-5">
+          Keep all the white squares alive when the turn plays out — that's the only goal.
+        </p>
+        <button type="button" onClick={onClose} className="w-full py-2.5 rounded-lg bg-teal-600 text-white font-bold mb-2">
+          Let's go
+        </button>
+        <button type="button" onClick={onShowRules} className="w-full py-2 text-stone-400 text-xs font-bold">
+          See full rules
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function PlayScreen({ level, onBack }) {
   const [gameState, setGameState] = useState(() => makeGameStateFromLevel(level));
   const [phase, setPhase] = useState("planning");
@@ -1006,7 +1031,29 @@ function PlayScreen({ level, onBack }) {
   const [headerStreak, setHeaderStreak] = useState(0);
   const [wonToday, setWonToday] = useState(false);
   const [showRules, setShowRules] = useState(false);
+  const [showIntro, setShowIntro] = useState(false);
+  const [bulletPos, setBulletPos] = useState(null);
   const placementCounterRef = useRef(0);
+
+  useEffect(() => {
+    // Only the real daily game greets first-timers — not the level editor's
+    // "test play" mode, which reuses this same screen.
+    if (onBack) return;
+    try {
+      if (!localStorage.getItem("puzzlelab_seen_intro")) setShowIntro(true);
+    } catch (e) {
+      // localStorage unavailable — skip the one-time intro
+    }
+  }, []);
+
+  function dismissIntro() {
+    setShowIntro(false);
+    try {
+      localStorage.setItem("puzzlelab_seen_intro", "1");
+    } catch (e) {
+      // ignore write failure
+    }
+  }
 
   useEffect(() => {
     setGameState(makeGameStateFromLevel(level));
@@ -1027,6 +1074,40 @@ function PlayScreen({ level, onBack }) {
     }
     const t = setTimeout(() => setRevealStep((r) => r + 1), 1000);
     return () => clearTimeout(t);
+  }, [phase, resolution, revealStep]);
+
+  // Drives the traveling "bullet" dot on an enemy's turn: snap it to the
+  // enemy's tile with no transition, then (one frame later, so the browser
+  // has actually painted that starting position) move it to the impact tile
+  // WITH a transition — the same snap-then-transition trick the enemy/unit
+  // tokens themselves use (see the SLIDE constant) to animate across tiles.
+  useEffect(() => {
+    if (phase !== "resolving" || !resolution || revealStep === 0) {
+      setBulletPos(null);
+      return;
+    }
+    const actor = resolution.actors[revealStep - 1];
+    if (!actor || actor.type !== "enemy") {
+      setBulletPos(null);
+      return;
+    }
+    const beforeState = resolution.snapshots[revealStep - 1];
+    const enemy = beforeState.enemies.find((e) => e.id === actor.id);
+    if (!enemy || !enemy.alive) {
+      setBulletPos(null);
+      return;
+    }
+    const ray = threatRay(beforeState, enemy);
+    if (ray.tiles.length === 0) {
+      setBulletPos(null);
+      return;
+    }
+    const end = ray.tiles[ray.tiles.length - 1];
+    setBulletPos({ x: enemy.x, y: enemy.y, animate: false });
+    const raf = requestAnimationFrame(() => {
+      setBulletPos({ x: end.x, y: end.y, animate: true });
+    });
+    return () => cancelAnimationFrame(raf);
   }, [phase, resolution, revealStep]);
 
   useEffect(() => {
@@ -1133,7 +1214,7 @@ function PlayScreen({ level, onBack }) {
       : null;
   // Impact bursts wait for the bullet to actually arrive instead of popping
   // instantly.
-  const flashDelay = activeEnemyRay ? 0.32 : 0;
+  const flashDelay = activeEnemyRay ? 0.5 : 0;
 
   // Enemies that have already fired their attack, as of the currently displayed
   // snapshot. Once an enemy is in this set it stops contributing any threat
@@ -1507,25 +1588,6 @@ function PlayScreen({ level, onBack }) {
               strokeWidth="0.05"
             />
           ))}
-          {activeEnemyRay && (
-            <circle key={`bullet-${revealStep}`} r="0.1" fill="#fde047" stroke="#f97316" strokeWidth="0.035">
-              <animate
-                attributeName="cx"
-                from={activeEnemyRay.enemy.x + 0.5}
-                to={activeEnemyRay.tiles[activeEnemyRay.tiles.length - 1].x + 0.5}
-                dur="0.32s"
-                fill="freeze"
-              />
-              <animate
-                attributeName="cy"
-                from={activeEnemyRay.enemy.y + 0.5}
-                to={activeEnemyRay.tiles[activeEnemyRay.tiles.length - 1].y + 0.5}
-                dur="0.32s"
-                fill="freeze"
-              />
-              <animate attributeName="opacity" values="1;1;0" keyTimes="0;0.85;1" dur="0.32s" fill="freeze" />
-            </circle>
-          )}
           {flashTile && flashTile.kind === "kill" && (
             <g key={`flash-${revealStep}`}>
               {[0, 60, 120, 180, 240, 300].map((angle) => (
@@ -1642,6 +1704,27 @@ function PlayScreen({ level, onBack }) {
             </div>
           );
         })}
+
+        {bulletPos && (
+          <div
+            style={{
+              position: "absolute",
+              left: `${((bulletPos.x + 0.5) / SIZE) * 100}%`,
+              top: `${((bulletPos.y + 0.5) / SIZE) * 100}%`,
+              width: 16,
+              height: 16,
+              marginLeft: -8,
+              marginTop: -8,
+              borderRadius: "50%",
+              background: "#ff3b3b",
+              border: "2.5px solid #7f1d1d",
+              boxShadow: "0 0 6px 1px rgba(255,59,59,0.8)",
+              transition: bulletPos.animate ? "left 0.55s linear, top 0.55s linear" : "none",
+              zIndex: 4,
+              pointerEvents: "none",
+            }}
+          />
+        )}
 
         {boardUnits.map((unit) => {
           const displayUnit = displayState.units.find((u) => u.id === unit.id);
@@ -1805,6 +1888,15 @@ function PlayScreen({ level, onBack }) {
       </div>
 
       {showRules && <RulesModal onClose={() => setShowRules(false)} />}
+      {showIntro && (
+        <IntroScreen
+          onClose={dismissIntro}
+          onShowRules={() => {
+            dismissIntro();
+            setShowRules(true);
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -1819,12 +1911,34 @@ function PlayScreen({ level, onBack }) {
 // LAUNCH_DATE is day 1. Change this once, when you actually launch, and
 // never change it again — moving it later would shift which puzzle
 // everyone sees on a given day.
-const LAUNCH_DATE = "2026-08-19"; // YYYY-MM-DD, treated as UTC midnight
+const LAUNCH_DATE = "2026-08-19"; // YYYY-MM-DD calendar date, rolls over per amsterdamPuzzleDateStr()
+
+// The puzzle rolls over at 9am Europe/Amsterdam time, not UTC midnight —
+// before 9am local it's still showing the previous calendar day's puzzle.
+// Intl's timeZone support handles CET/CEST (DST) automatically, so this
+// stays correct year-round without a date library.
+function amsterdamPuzzleDateStr() {
+  const fmt = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Europe/Amsterdam",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    hour12: false,
+  });
+  const parts = {};
+  for (const p of fmt.formatToParts(new Date())) parts[p.type] = p.value;
+  const y = Number(parts.year);
+  const m = Number(parts.month);
+  const d = Number(parts.day);
+  const hour = Number(parts.hour) % 24; // midnight can render as "24" in some engines
+  const effectiveDay = hour < 9 ? d - 1 : d; // Date.UTC normalizes an out-of-range day fine
+  return new Date(Date.UTC(y, m - 1, effectiveDay)).toISOString().slice(0, 10);
+}
 
 function dayIndexSince(launchDateStr) {
   const start = new Date(launchDateStr + "T00:00:00Z").getTime();
-  const now = new Date();
-  const today = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+  const today = new Date(amsterdamPuzzleDateStr() + "T00:00:00Z").getTime();
   const diffDays = Math.floor((today - start) / 86400000);
   return Math.max(0, diffDays);
 }
