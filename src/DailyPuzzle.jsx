@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { RotateCcw, Magnet } from "lucide-react";
+import { RotateCcw, Magnet, Hand, Info, X } from "lucide-react";
 
 const SIZE = 8;
 
@@ -690,10 +690,16 @@ function pusherFacingAngle(state, unit) {
 // acting during resolution. `armedIdle` is a gentle looping wobble shown during
 // planning whenever a Rotator/Counter-rotator has a valid adjacent target, so
 // it's obvious ahead of time that it's "armed" and will do something.
-function UnitIcon({ unit, size = 26, facingAngle = null, spinAnimation = null, armedIdle = null }) {
+function UnitIcon({ unit, size = 26, facingAngle = null, spinAnimation = null, armedIdle = null, inHand = false }) {
   const rotateStyle = facingAngle != null ? { transform: `rotate(${facingAngle}deg)`, transition: "transform 0.25s ease" } : null;
   if (unit.ability === "pull") {
     return <Magnet style={{ width: size * 0.72, height: size * 0.72 }} strokeWidth={2.75} />;
+  }
+  // Pushers show a plain hand while sitting in the hand tray — the directional
+  // arrow only makes sense once the unit is on the board and can point at
+  // something, so give it a different glyph before that.
+  if (unit.ability === "push" && inHand) {
+    return <Hand style={{ width: size * 0.72, height: size * 0.72 }} strokeWidth={2.75} />;
   }
   const animation = spinAnimation ? `${spinAnimation} 0.6s ease-in-out` : armedIdle ? `${armedIdle} 1.1s ease-in-out infinite` : "none";
   return (
@@ -772,6 +778,165 @@ function sortedByPlacement(units) {
   return [...units].sort((a, b) => (a.order ?? Infinity) - (b.order ?? Infinity));
 }
 
+function RuleRow({ swatch, title, children }) {
+  return (
+    <div className="flex items-start gap-3 mb-3">
+      <div className="shrink-0 flex items-center justify-center rounded-md" style={{ width: 40, height: 40, background: "#1e293b" }}>
+        {swatch}
+      </div>
+      <div>
+        <p className="text-white font-bold" style={{ fontSize: 13 }}>{title}</p>
+        <p className="text-slate-400" style={{ fontSize: 12, lineHeight: 1.35 }}>{children}</p>
+      </div>
+    </div>
+  );
+}
+
+// Rules explained with small swatches that reuse the exact colors/shapes the
+// board itself uses (building tile, enemy circle + facing arrow, threat
+// overlays, unit squares) so the legend doubles as a visual example.
+function RulesModal({ onClose }) {
+  return (
+    <div
+      style={{ position: "fixed", inset: 0, zIndex: 200, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,0.65)" }}
+      onClick={onClose}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="bg-slate-800 border-2 border-slate-600 rounded-xl p-5 w-full max-w-xs mx-4"
+        style={{ maxHeight: "85vh", overflowY: "auto", animation: "popIn 0.2s ease-out" }}
+      >
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-white font-black" style={{ fontSize: 18 }}>How to play</h3>
+          <button type="button" onClick={onClose} aria-label="Close" className="p-1 rounded-md text-slate-300">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <RuleRow
+          title="Goal"
+          swatch={
+            <div
+              className="rounded-sm"
+              style={{
+                width: 18,
+                height: 18,
+                background: "linear-gradient(155deg, #fff1f1 0%, #fecaca 100%)",
+                boxShadow: "0 0 0 2px #ef4444, 0 0 8px 2px rgba(239,68,68,0.55)",
+              }}
+            />
+          }
+        >
+          Keep every building alive when the turn plays out. Lose one and the puzzle is lost.
+        </RuleRow>
+
+        <RuleRow
+          title="Enemies"
+          swatch={
+            <div style={{ position: "relative", width: 22, height: 22 }}>
+              <div className="rounded-full bg-red-500" style={{ width: "100%", height: "100%" }} />
+              <div
+                style={{
+                  position: "absolute",
+                  top: -7,
+                  left: "50%",
+                  width: 0,
+                  height: 0,
+                  borderLeft: "4px solid transparent",
+                  borderRight: "4px solid transparent",
+                  borderBottom: "7px solid #fff",
+                  transform: "translateX(-50%)",
+                }}
+              />
+            </div>
+          }
+        >
+          Each one faces a direction (white arrow) and fires in a straight line the moment you hit Play.
+        </RuleRow>
+
+        <RuleRow
+          title="Threat tiles"
+          swatch={
+            <div className="flex gap-1">
+              <div style={{ width: 14, height: 14, background: "#7f1d1d", border: "2px solid #ef4444", borderRadius: 2 }} />
+              <div style={{ width: 14, height: 14, background: "#450a0a", border: "1px solid #f87171", borderRadius: 2 }} />
+            </div>
+          }
+        >
+          Bold red = gets hit right now. Pale red = gets hit after this turn's pushes/pulls/conveyors.
+        </RuleRow>
+
+        <RuleRow
+          title="Pusher"
+          swatch={
+            <div className="rounded-md flex items-center justify-center" style={{ width: 26, height: 26, background: "#0d9488", color: "#fff", fontSize: 16, fontWeight: 900 }}>
+              →
+            </div>
+          }
+        >
+          Drop it next to an enemy — on Play it shoves that enemy back one tile.
+        </RuleRow>
+
+        <RuleRow
+          title="Puller"
+          swatch={
+            <div className="rounded-md flex items-center justify-center" style={{ width: 26, height: 26, background: "#0d9488", color: "#fff" }}>
+              <Magnet style={{ width: 16, height: 16 }} strokeWidth={2.75} />
+            </div>
+          }
+        >
+          Pulls the nearest enemy in line toward it, in whichever of the four directions has one.
+        </RuleRow>
+
+        <RuleRow
+          title="Blocker"
+          swatch={
+            <div className="rounded-md flex items-center justify-center" style={{ width: 26, height: 26, background: "#0d9488", color: "#fff", fontSize: 16, fontWeight: 900 }}>
+              ■
+            </div>
+          }
+        >
+          Just occupies its tile — use it to soak a shot, or to block where a pushed/pulled enemy would land.
+        </RuleRow>
+
+        <RuleRow
+          title="Rotators"
+          swatch={
+            <div className="flex gap-1">
+              <div className="rounded-md flex items-center justify-center" style={{ width: 26, height: 26, background: "#0d9488", color: "#fff", fontSize: 16, fontWeight: 900 }}>
+                ↻
+              </div>
+              <div className="rounded-md flex items-center justify-center" style={{ width: 26, height: 26, background: "#0d9488", color: "#fff", fontSize: 16, fontWeight: 900 }}>
+                ↺
+              </div>
+            </div>
+          }
+        >
+          Turn an adjacent enemy 90° clockwise or counter-clockwise, redirecting its shot.
+        </RuleRow>
+
+        <RuleRow
+          title="Turn order"
+          swatch={
+            <div
+              className="rounded-full flex items-center justify-center"
+              style={{ width: 20, height: 20, background: "#0f172a", border: "1.5px solid #5eead4", color: "#5eead4", fontSize: 11, fontWeight: 900 }}
+            >
+              1
+            </div>
+          }
+        >
+          Units act in the order you placed them on the board, then every surviving enemy fires.
+        </RuleRow>
+
+        <button type="button" onClick={onClose} className="w-full mt-1 py-2.5 rounded-lg bg-teal-600 text-white font-bold">
+          Got it
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function PlayScreen({ level, onBack }) {
   const [gameState, setGameState] = useState(() => makeGameStateFromLevel(level));
   const [phase, setPhase] = useState("planning");
@@ -781,6 +946,7 @@ function PlayScreen({ level, onBack }) {
   const [dragPos, setDragPos] = useState({ x: 0, y: 0 });
   const [hoverTile, setHoverTile] = useState(null);
   const [streak, setStreak] = useState(null);
+  const [showRules, setShowRules] = useState(false);
   const placementCounterRef = useRef(0);
 
   useEffect(() => {
@@ -795,7 +961,7 @@ function PlayScreen({ level, onBack }) {
   useEffect(() => {
     if (phase !== "resolving" || !resolution) return;
     if (revealStep >= resolution.snapshots.length - 1) {
-      const t = setTimeout(() => setPhase("done"), 600);
+      const t = setTimeout(() => setPhase("done"), 500);
       return () => clearTimeout(t);
     }
     const t = setTimeout(() => setRevealStep((r) => r + 1), 1000);
@@ -909,7 +1075,21 @@ function PlayScreen({ level, onBack }) {
     setRevealStep(0);
     setDrag(null);
     setHoverTile(null);
+    setStreak(null);
     placementCounterRef.current = 0;
+  }
+
+  // Retry after a resolved turn (win or lose) without clearing the board back
+  // to the hand. `gameState` itself is never mutated during resolution —
+  // computeResolution works on a clone — so it still holds exactly the
+  // layout the player had when they hit Play, ready for small adjustments.
+  function retryPlan() {
+    setPhase("planning");
+    setResolution(null);
+    setRevealStep(0);
+    setDrag(null);
+    setHoverTile(null);
+    setStreak(null);
   }
 
   function onUnitPointerDown(e, unit) {
@@ -1065,13 +1245,27 @@ function PlayScreen({ level, onBack }) {
 
   return (
     <div className="bg-slate-900 p-6 rounded-xl">
-      <div className="max-w-md mx-auto mb-4 flex items-center justify-between gap-3">
-        <h2 className="text-white font-black tracking-tight" style={{ fontSize: 24 }}>{level.name}</h2>
+      <div className="max-w-md mx-auto mb-4 relative flex items-center justify-center" style={{ minHeight: 40 }}>
         {onBack && (
-          <button type="button" onClick={onBack} className="shrink-0 p-2 rounded-md border-2 border-slate-600 text-slate-200">
+          <button
+            type="button"
+            onClick={onBack}
+            className="shrink-0 p-2 rounded-md border-2 border-slate-600 text-slate-200"
+            style={{ position: "absolute", left: 0 }}
+          >
             Menu
           </button>
         )}
+        <h2 className="text-white font-black tracking-tight text-center" style={{ fontSize: 24 }}>{level.name}</h2>
+        <button
+          type="button"
+          onClick={() => setShowRules(true)}
+          aria-label="How to play"
+          className="shrink-0 flex items-center justify-center rounded-full border-2 border-slate-600 text-slate-200"
+          style={{ position: "absolute", right: 0, width: 32, height: 32 }}
+        >
+          <Info className="w-4 h-4" />
+        </button>
       </div>
 
       <div className="relative w-full max-w-md mx-auto" style={{ aspectRatio: "1 / 1" }}>
@@ -1125,6 +1319,15 @@ function PlayScreen({ level, onBack }) {
             50% { box-shadow: 0 0 0 2px #ef4444, 0 0 16px 5px rgba(239,68,68,0.85); }
           }
           @keyframes beltStripes { to { background-position: -13px 0; } }
+          @keyframes enemyFire {
+            0% { transform: scale(1); }
+            35% { transform: scale(1.35); }
+            100% { transform: scale(1); }
+          }
+          @keyframes popIn {
+            0% { opacity: 0; transform: scale(0.92); }
+            100% { opacity: 1; transform: scale(1); }
+          }
         `}</style>
         <svg className="absolute inset-0" viewBox={`0 0 ${SIZE} ${SIZE}`} preserveAspectRatio="none" style={{ pointerEvents: "none" }}>
           {previewLines.map((l, i) => {
@@ -1203,34 +1406,43 @@ function PlayScreen({ level, onBack }) {
           )}
         </svg>
 
-        {displayState.enemies.map((enemy, enemyIndex) => (
-          <div
-            key={enemy.id}
-            className="flex items-center justify-center"
-            style={{
-              position: "absolute",
-              left: `${(enemy.x / SIZE) * 100}%`,
-              top: `${(enemy.y / SIZE) * 100}%`,
-              width: `${100 / SIZE}%`,
-              height: `${100 / SIZE}%`,
-              pointerEvents: "none",
-              transition: SLIDE,
-              opacity: enemy.alive ? 1 : 0,
-              transform: enemy.alive ? "scale(1)" : "scale(0.3)",
-              zIndex: 2,
-            }}
-          >
-            <div style={{ position: "relative", width: "62%", height: "62%" }}>
-              <div
-                className="rounded-full bg-red-500 flex items-center justify-center text-white w-full h-full"
-                style={{ fontSize: 15, fontWeight: 900 }}
-              >
-                {enemyIndex + 1}
+        {displayState.enemies.map((enemy, enemyIndex) => {
+          const isEnemyActing = !!activeActor && activeActor.type === "enemy" && activeActor.id === enemy.id;
+          return (
+            <div
+              key={enemy.id}
+              className="flex items-center justify-center"
+              style={{
+                position: "absolute",
+                left: `${(enemy.x / SIZE) * 100}%`,
+                top: `${(enemy.y / SIZE) * 100}%`,
+                width: `${100 / SIZE}%`,
+                height: `${100 / SIZE}%`,
+                pointerEvents: "none",
+                transition: SLIDE,
+                opacity: enemy.alive ? 1 : 0,
+                transform: enemy.alive ? "scale(1)" : "scale(0.3)",
+                zIndex: 2,
+              }}
+            >
+              <div style={{ position: "relative", width: "62%", height: "62%" }}>
+                <div
+                  className="rounded-full bg-red-500 flex items-center justify-center text-white w-full h-full"
+                  style={{
+                    fontSize: 15,
+                    fontWeight: 900,
+                    boxShadow: isEnemyActing ? "0 0 0 3px #fde047, 0 0 16px 5px rgba(253,224,71,0.85)" : "none",
+                    animation: isEnemyActing ? "enemyFire 0.5s ease-in-out" : "none",
+                    transition: "box-shadow 0.25s ease",
+                  }}
+                >
+                  {enemyIndex + 1}
+                </div>
+                <EnemyFacing dir={enemy.dir} />
               </div>
-              <EnemyFacing dir={enemy.dir} />
             </div>
-          </div>
-        ))}
+          );
+        })}
 
         {boardUnits.map((unit) => {
           const displayUnit = displayState.units.find((u) => u.id === unit.id);
@@ -1312,7 +1524,7 @@ function PlayScreen({ level, onBack }) {
                 className="w-12 h-12 flex items-center justify-center rounded-md cursor-grab active:cursor-grabbing select-none"
                 style={{ touchAction: "none", background: "#0d9488", color: "#ffffff", fontSize: 24, fontWeight: 900 }}
               >
-                <UnitIcon unit={unit} size={24} />
+                <UnitIcon unit={unit} size={24} inHand />
               </div>
               <span className="text-slate-300 font-bold" style={{ fontSize: 11 }}>{unit.name}</span>
             </div>
@@ -1332,7 +1544,7 @@ function PlayScreen({ level, onBack }) {
             className="w-full h-full flex items-center justify-center rounded-md"
             style={{ background: "#0d9488", color: "#ffffff", fontSize: 26, fontWeight: 900 }}
           >
-            <UnitIcon unit={draggedUnit} />
+            <UnitIcon unit={draggedUnit} inHand={!draggedUnit.onBoard} />
           </div>
         </div>
       )}
@@ -1341,18 +1553,21 @@ function PlayScreen({ level, onBack }) {
         <div
           style={{ position: "fixed", inset: 0, zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,0.6)" }}
         >
-          <div className="bg-slate-800 border-2 border-slate-600 rounded-xl p-6 w-full max-w-xs mx-4 text-center">
+          <div
+            className="bg-slate-800 border-2 border-slate-600 rounded-xl p-6 w-full max-w-xs mx-4 text-center"
+            style={{ animation: "popIn 0.25s ease-out" }}
+          >
             {resolution.outcome === "success" ? (
               <>
                 <p className="text-emerald-400 font-black mb-1" style={{ fontSize: 26 }}>Congratulations!</p>
                 <p className="text-slate-300 font-bold text-sm mb-5">{streak === null ? "\u2014" : `${streak} day streak`}</p>
+                {!onBack && <p className="text-slate-500 text-xs font-bold mb-4">Come back tomorrow for the next puzzle.</p>}
               </>
             ) : (
               <p className="text-red-400 font-black mb-6" style={{ fontSize: 26 }}>Lost</p>
             )}
-            {!onBack && <p className="text-slate-500 text-xs font-bold mb-4">Come back tomorrow for the next puzzle.</p>}
             <div className="flex gap-2 justify-center">
-              <button type="button" onClick={reset} className="flex-1 py-2.5 rounded-lg bg-teal-600 text-white font-bold flex items-center justify-center gap-1">
+              <button type="button" onClick={retryPlan} className="flex-1 py-2.5 rounded-lg bg-teal-600 text-white font-bold flex items-center justify-center gap-1">
                 <RotateCcw className="w-5 h-5" /> Reset
               </button>
               {onBack && (
@@ -1373,6 +1588,8 @@ function PlayScreen({ level, onBack }) {
           <RotateCcw className="w-5 h-5" /> Reset
         </button>
       </div>
+
+      {showRules && <RulesModal onClose={() => setShowRules(false)} />}
     </div>
   );
 }
