@@ -1730,7 +1730,7 @@ function PlayScreen({ level, onBack }) {
         <div
           data-hand
           className="flex flex-wrap gap-3 p-3 rounded-lg border-2 border-stone-600 bg-stone-800"
-          style={{ width: "100%", minHeight: 78, boxSizing: "border-box" }}
+          style={{ width: "100%", height: 100, overflow: "hidden", boxSizing: "border-box" }}
         >
           {handUnits.map((unit) => (
             <div key={unit.id} className="flex flex-col items-center gap-1">
