@@ -654,6 +654,26 @@ async function recordWinAndGetStreak() {
   return streak;
 }
 
+// A read-only peek at the persisted streak, for the header badge — mirrors
+// recordWinAndGetStreak's own logic for whether a streak is still alive
+// (won today or yesterday) without writing anything or requiring a win.
+function getCurrentStreak() {
+  try {
+    const raw = localStorage.getItem("puzzlelab_streak");
+    if (!raw) return 0;
+    const data = JSON.parse(raw);
+    const today = new Date().toISOString().slice(0, 10);
+    if (data.lastDate === today) return data.streak;
+    const y = new Date();
+    y.setDate(y.getDate() - 1);
+    const yesterday = y.toISOString().slice(0, 10);
+    if (data.lastDate === yesterday) return data.streak;
+    return 0;
+  } catch (e) {
+    return 0;
+  }
+}
+
 const SLIDE = "left 0.6s ease, top 0.6s ease, opacity 0.4s ease, transform 0.4s ease";
 function dirAngle(dir) {
   if (dir.dx === 1) return 0;
@@ -719,27 +739,27 @@ function UnitIcon({ unit, size = 26, facingAngle = null, spinAnimation = null, a
 
 function EnemyFacing({ dir }) {
   return (
-    <div
+    <svg
+      viewBox="0 0 24 24"
       style={{
         position: "absolute",
         top: "50%",
         left: "50%",
-        width: 0,
-        height: 0,
-        borderLeft: "6px solid transparent",
-        borderRight: "6px solid transparent",
-        borderBottom: "11px solid #ffffff",
-        filter: "drop-shadow(0 0 1px rgba(0,0,0,0.9))",
-        transform: `translate(-50%, -50%) rotate(${upBasedAngle(dir)}deg) translateY(-16px)`,
+        width: 18,
+        height: 18,
+        transform: `translate(-50%, -50%) rotate(${upBasedAngle(dir)}deg) translateY(-15px)`,
+        filter: "drop-shadow(0 1px 1.5px rgba(0,0,0,0.85))",
         pointerEvents: "none",
       }}
-    />
+    >
+      <path d="M12 2 L19.5 16 L12 12 L4.5 16 Z" fill="#ffffff" stroke="#7f1d1d" strokeWidth="0.8" strokeLinejoin="round" />
+    </svg>
   );
 }
 
 function TerrainMark({ wall, conveyor }) {
   if (wall) {
-    return <div className="absolute inset-0 rounded-sm" style={{ background: "#020617", zIndex: 0 }} />;
+    return <div className="absolute inset-0 rounded-sm" style={{ background: "#0c0a09", zIndex: 0 }} />;
   }
   if (conveyor) {
     const angle = dirAngle(conveyor.dir);
@@ -781,12 +801,12 @@ function sortedByPlacement(units) {
 function RuleRow({ swatch, title, children }) {
   return (
     <div className="flex items-start gap-3 mb-3">
-      <div className="shrink-0 flex items-center justify-center rounded-md" style={{ width: 40, height: 40, background: "#1e293b" }}>
+      <div className="shrink-0 flex items-center justify-center rounded-md" style={{ width: 40, height: 40, background: "#292524" }}>
         {swatch}
       </div>
       <div>
         <p className="text-white font-bold" style={{ fontSize: 13 }}>{title}</p>
-        <p className="text-slate-400" style={{ fontSize: 12, lineHeight: 1.35 }}>{children}</p>
+        <p className="text-stone-400" style={{ fontSize: 12, lineHeight: 1.35 }}>{children}</p>
       </div>
     </div>
   );
@@ -803,12 +823,12 @@ function RulesModal({ onClose }) {
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="bg-slate-800 border-2 border-slate-600 rounded-xl p-5 w-full max-w-xs mx-4"
+        className="bg-stone-800 border-2 border-stone-600 rounded-xl p-5 w-full max-w-xs mx-4"
         style={{ maxHeight: "85vh", overflowY: "auto", animation: "popIn 0.2s ease-out" }}
       >
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-white font-black" style={{ fontSize: 18 }}>How to play</h3>
-          <button type="button" onClick={onClose} aria-label="Close" className="p-1 rounded-md text-slate-300">
+          <button type="button" onClick={onClose} aria-label="Close" className="p-1 rounded-md text-stone-300">
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -818,12 +838,7 @@ function RulesModal({ onClose }) {
           swatch={
             <div
               className="rounded-sm"
-              style={{
-                width: 18,
-                height: 18,
-                background: "linear-gradient(155deg, #fff1f1 0%, #fecaca 100%)",
-                boxShadow: "0 0 0 2px #ef4444, 0 0 8px 2px rgba(239,68,68,0.55)",
-              }}
+              style={{ width: 18, height: 18, background: "#f8fafc", boxShadow: "0 1px 2px rgba(0,0,0,0.25)" }}
             />
           }
         >
@@ -920,13 +935,13 @@ function RulesModal({ onClose }) {
           swatch={
             <div
               className="rounded-full flex items-center justify-center"
-              style={{ width: 20, height: 20, background: "#0f172a", border: "1.5px solid #5eead4", color: "#5eead4", fontSize: 11, fontWeight: 900 }}
+              style={{ width: 20, height: 20, background: "#1c1917", border: "1.5px solid #5eead4", color: "#5eead4", fontSize: 11, fontWeight: 900 }}
             >
               1
             </div>
           }
         >
-          Units act in the order you placed them on the board, then every surviving enemy fires.
+          Pieces act in the order you placed them on the board, then every surviving enemy fires.
         </RuleRow>
 
         <button type="button" onClick={onClose} className="w-full mt-1 py-2.5 rounded-lg bg-teal-600 text-white font-bold">
@@ -946,6 +961,7 @@ function PlayScreen({ level, onBack }) {
   const [dragPos, setDragPos] = useState({ x: 0, y: 0 });
   const [hoverTile, setHoverTile] = useState(null);
   const [streak, setStreak] = useState(null);
+  const [headerStreak, setHeaderStreak] = useState(0);
   const [showRules, setShowRules] = useState(false);
   const placementCounterRef = useRef(0);
 
@@ -955,6 +971,7 @@ function PlayScreen({ level, onBack }) {
     setResolution(null);
     setRevealStep(0);
     setStreak(null);
+    setHeaderStreak(getCurrentStreak());
     placementCounterRef.current = 0;
   }, [level]);
 
@@ -970,7 +987,10 @@ function PlayScreen({ level, onBack }) {
 
   useEffect(() => {
     if (phase === "done" && resolution && resolution.outcome === "success") {
-      recordWinAndGetStreak().then(setStreak);
+      recordWinAndGetStreak().then((s) => {
+        setStreak(s);
+        setHeaderStreak(s);
+      });
     }
   }, [phase, resolution]);
 
@@ -983,6 +1003,24 @@ function PlayScreen({ level, onBack }) {
       setHoverTile(tileEl ? { x: Number(tileEl.dataset.x), y: Number(tileEl.dataset.y) } : null);
     }
     function onUp(e) {
+      // A tap (barely any movement since pointerdown) on a piece that was
+      // already on the board sends it back to the hand, regardless of what's
+      // under the finger at release — dragging is the only way to reposition.
+      const movedDist = Math.hypot(e.clientX - drag.startX, e.clientY - drag.startY);
+      if (movedDist < 10 && drag.wasOnBoard) {
+        setGameState((prev) => {
+          const next = clone(prev);
+          const u = next.units.find((u) => u.id === drag.unitId);
+          u.onBoard = false;
+          u.x = null;
+          u.y = null;
+          u.order = null;
+          return next;
+        });
+        setDrag(null);
+        setHoverTile(null);
+        return;
+      }
       const el = document.elementFromPoint(e.clientX, e.clientY);
       const tileEl = el && el.closest("[data-tile]");
       const handEl = el && el.closest("[data-hand]");
@@ -1096,7 +1134,7 @@ function PlayScreen({ level, onBack }) {
     if (phase !== "planning") return;
     e.preventDefault();
     const validTiles = emptyTiles(gameState, unit.id);
-    setDrag({ unitId: unit.id, validTiles });
+    setDrag({ unitId: unit.id, validTiles, startX: e.clientX, startY: e.clientY, wasOnBoard: unit.onBoard });
     setDragPos({ x: e.clientX, y: e.clientY });
   }
 
@@ -1147,16 +1185,18 @@ function PlayScreen({ level, onBack }) {
 
   function tileClassName(x, y) {
     if (isWall(displayState, x, y)) {
-      return "relative aspect-square flex items-center justify-center rounded-sm border border-slate-800";
+      return "relative aspect-square flex items-center justify-center rounded-sm border border-stone-800";
     }
     const isValidDrop = drag && drag.validTiles.some((t) => t.x === x && t.y === y);
     const isHover = hoverTile && hoverTile.x === x && hoverTile.y === y;
     const threat = tileThreat(x, y);
 
     let variant;
+    // Placing is always legal on any empty tile, so only call out the one
+    // tile currently under the finger/cursor while dragging — lighting up
+    // every valid tile at once is redundant with that given.
     if (isValidDrop && isHover) variant = "border-2 border-teal-400 bg-teal-800";
-    else if (isValidDrop) variant = "border-2 border-teal-600 bg-teal-900";
-    else if (!threat) variant = "border border-slate-700 bg-slate-800";
+    else if (!threat) variant = "border border-stone-700 bg-stone-800";
     else if (threat.level === "bold") {
       // A single strong red for any live threat — miss, hit-a-building,
       // hit-a-unit, or beam-on-beam collision — so it's always clearly
@@ -1232,7 +1272,13 @@ function PlayScreen({ level, onBack }) {
     (u) => u.onBoard && !(phase === "planning" && drag && drag.unitId === u.id)
   );
   const handUnits = gameState.units.filter((u) => !u.onBoard && !(drag && drag.unitId === u.id));
-  const previewLines = phase === "planning" ? actionPreviewLines(previewState) : [];
+  // While a piece is actively being dragged, its old spot is stale — suppress
+  // any preview line starting there so it doesn't float over an empty tile.
+  // The line reappears once the piece is dropped somewhere new.
+  const previewLines =
+    phase === "planning"
+      ? actionPreviewLines(previewState).filter((l) => !(draggedUnit && draggedUnit.onBoard && l.fromX === draggedUnit.x && l.fromY === draggedUnit.y))
+      : [];
 
   // The badge shown to the player is always a compact 1..N rank among the
   // currently placed units, even though the underlying `order` field (used
@@ -1244,24 +1290,33 @@ function PlayScreen({ level, onBack }) {
     .forEach((u, i) => placementRankById.set(u.id, i + 1));
 
   return (
-    <div className="bg-slate-900 p-6 rounded-xl">
+    <div className="bg-stone-900 p-6 rounded-xl">
       <div className="max-w-md mx-auto mb-4 relative flex items-center justify-center" style={{ minHeight: 40 }}>
         {onBack && (
           <button
             type="button"
             onClick={onBack}
-            className="shrink-0 p-2 rounded-md border-2 border-slate-600 text-slate-200"
+            className="shrink-0 p-2 rounded-md border-2 border-stone-600 text-stone-200"
             style={{ position: "absolute", left: 0 }}
           >
             Menu
           </button>
+        )}
+        {!onBack && (
+          <div
+            className="shrink-0 flex items-center gap-1 rounded-full border-2 border-stone-600 text-stone-200 font-bold"
+            style={{ position: "absolute", left: 0, height: 32, padding: "0 10px", fontSize: 13 }}
+          >
+            <span style={{ fontSize: 14, lineHeight: 1 }}>🔥</span>
+            {headerStreak}
+          </div>
         )}
         <h2 className="text-white font-black tracking-tight text-center" style={{ fontSize: 24 }}>{level.name}</h2>
         <button
           type="button"
           onClick={() => setShowRules(true)}
           aria-label="How to play"
-          className="shrink-0 flex items-center justify-center rounded-full border-2 border-slate-600 text-slate-200"
+          className="shrink-0 flex items-center justify-center rounded-full border-2 border-stone-600 text-stone-200"
           style={{ position: "absolute", right: 0, width: 32, height: 32 }}
         >
           <Info className="w-4 h-4" />
@@ -1499,7 +1554,7 @@ function PlayScreen({ level, onBack }) {
                     right: "6%",
                     width: 16,
                     height: 16,
-                    background: "#0f172a",
+                    background: "#1c1917",
                     border: "1.5px solid #5eead4",
                     color: "#5eead4",
                     fontSize: 10,
@@ -1516,7 +1571,7 @@ function PlayScreen({ level, onBack }) {
       </div>
 
       <div className="mt-4 max-w-md mx-auto">
-        <div data-hand className="flex flex-wrap gap-3 p-3 rounded-lg border-2 border-slate-600 bg-slate-800 min-h-16">
+        <div data-hand className="flex flex-wrap gap-3 p-3 rounded-lg border-2 border-stone-600 bg-stone-800 min-h-16">
           {handUnits.map((unit) => (
             <div key={unit.id} className="flex flex-col items-center gap-1">
               <div
@@ -1526,11 +1581,11 @@ function PlayScreen({ level, onBack }) {
               >
                 <UnitIcon unit={unit} size={24} inHand />
               </div>
-              <span className="text-slate-300 font-bold" style={{ fontSize: 11 }}>{unit.name}</span>
+              <span className="text-stone-300 font-bold" style={{ fontSize: 11 }}>{unit.name}</span>
             </div>
           ))}
           {handUnits.length === 0 && phase === "planning" && (
-            <span className="text-sm text-slate-400 font-bold flex items-center px-2">All units placed</span>
+            <span className="text-sm text-stone-400 font-bold flex items-center px-2">All pieces played</span>
           )}
         </div>
       </div>
@@ -1554,14 +1609,14 @@ function PlayScreen({ level, onBack }) {
           style={{ position: "fixed", inset: 0, zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,0.6)" }}
         >
           <div
-            className="bg-slate-800 border-2 border-slate-600 rounded-xl p-6 w-full max-w-xs mx-4 text-center"
+            className="bg-stone-800 border-2 border-stone-600 rounded-xl p-6 w-full max-w-xs mx-4 text-center"
             style={{ animation: "popIn 0.25s ease-out" }}
           >
             {resolution.outcome === "success" ? (
               <>
                 <p className="text-emerald-400 font-black mb-1" style={{ fontSize: 26 }}>Congratulations!</p>
-                <p className="text-slate-300 font-bold text-sm mb-5">{streak === null ? "\u2014" : `${streak} day streak`}</p>
-                {!onBack && <p className="text-slate-500 text-xs font-bold mb-4">Come back tomorrow for the next puzzle.</p>}
+                <p className="text-stone-300 font-bold text-sm mb-5">{streak === null ? "\u2014" : `${streak} day streak`}</p>
+                {!onBack && <p className="text-stone-500 text-xs font-bold mb-4">Come back tomorrow for the next puzzle.</p>}
               </>
             ) : (
               <p className="text-red-400 font-black mb-6" style={{ fontSize: 26 }}>Lost</p>
@@ -1571,7 +1626,7 @@ function PlayScreen({ level, onBack }) {
                 <RotateCcw className="w-5 h-5" /> Reset
               </button>
               {onBack && (
-                <button type="button" onClick={onBack} className="px-4 py-2.5 rounded-lg border-2 border-slate-500 text-slate-200 font-bold">
+                <button type="button" onClick={onBack} className="px-4 py-2.5 rounded-lg border-2 border-stone-500 text-stone-200 font-bold">
                   Menu
                 </button>
               )}
@@ -1584,7 +1639,7 @@ function PlayScreen({ level, onBack }) {
         <button type="button" onClick={play} disabled={phase !== "planning"} className="flex-1 py-2.5 rounded-lg bg-teal-600 disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold" style={{ fontSize: 16 }}>
           Play
         </button>
-        <button type="button" onClick={reset} className="px-4 py-2.5 rounded-lg border-2 border-slate-500 text-slate-200 font-bold flex items-center gap-1">
+        <button type="button" onClick={reset} className="px-4 py-2.5 rounded-lg border-2 border-stone-500 text-stone-200 font-bold flex items-center gap-1">
           <RotateCcw className="w-5 h-5" /> Reset
         </button>
       </div>
@@ -1625,8 +1680,20 @@ function pickDailyLevel(levels, launchDateStr) {
 export default function DailyPuzzleApp() {
   const { level, dayNumber } = pickDailyLevel(BUILT_IN_LEVELS, LAUNCH_DATE);
   return (
-    <div style={{ minHeight: "100vh", background: "#0f172a", display: "flex", flexDirection: "column", alignItems: "center", paddingTop: 24, paddingBottom: 24 }}>
-      <p className="text-slate-500 font-bold text-xs mb-2" style={{ letterSpacing: 1 }}>PUZZLE #{dayNumber}</p>
+    <div
+      style={{
+        height: "100dvh",
+        overflow: "hidden",
+        background: "#1c1917",
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        paddingTop: 24,
+        paddingBottom: 24,
+      }}
+    >
+      <p className="text-stone-500 font-bold text-xs mb-2" style={{ letterSpacing: 1 }}>PUZZLE #{dayNumber}</p>
       <div className="w-full max-w-md px-4">
         <PlayScreen level={level} onBack={null} />
       </div>

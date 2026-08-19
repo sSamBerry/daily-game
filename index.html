@@ -7,6 +7,21 @@
     <!-- Tailwind via CDN for a quick launch. Swap for a real Tailwind build
          later (see README) once you want faster page loads. -->
     <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+      /* This is a drag-driven mobile game — the page itself should never
+         scroll or rubber-band, only the app's own internal overlays do. */
+      html, body {
+        margin: 0;
+        height: 100%;
+        overflow: hidden;
+        overscroll-behavior: none;
+        background: #1c1917;
+      }
+      #root {
+        height: 100%;
+        overflow: hidden;
+      }
+    </style>
   </head>
   <body>
     <div id="root"></div>
