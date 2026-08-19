@@ -1428,6 +1428,7 @@ function EditorScreen({ initialLevel, onBack, onSaved, onTest }) {
   const [tool, setTool] = useState("wall");
   const [toolDir, setToolDir] = useState(DIRS[1]);
   const [saving, setSaving] = useState(false);
+  const [copyStatus, setCopyStatus] = useState("idle");
   const [aimDrag, setAimDrag] = useState(null);
   const [aimPreview, setAimPreview] = useState(null);
   const paintingRef = useRef(false);
@@ -1574,10 +1575,27 @@ function EditorScreen({ initialLevel, onBack, onSaved, onTest }) {
 
   async function handleSave() {
     setSaving(true);
-    const saved = await saveCustomLevel(draft);
-    setDraft(saved);
+    try {
+      const saved = await saveCustomLevel(draft);
+      setDraft(saved);
+      onSaved(saved);
+    } catch (e) {
+      // window.storage only exists inside Claude.ai's own artifact sandbox —
+      // running this locally (e.g. `npm run dev`), Save has nothing to write
+      // to. Use "Copy JSON" instead and hand the level definition off that way.
+    }
     setSaving(false);
-    onSaved(saved);
+  }
+
+  async function handleCopyJson() {
+    const json = JSON.stringify(draft, null, 2);
+    try {
+      await navigator.clipboard.writeText(json);
+      setCopyStatus("copied");
+    } catch (e) {
+      setCopyStatus("error");
+    }
+    setTimeout(() => setCopyStatus("idle"), 2000);
   }
 
   const tiles = [];
@@ -1764,9 +1782,15 @@ function EditorScreen({ initialLevel, onBack, onSaved, onTest }) {
         <button type="button" onClick={handleSave} disabled={saving} className="px-4 py-2 rounded border border-slate-600 text-slate-300 text-sm">
           {saving ? "Saving\u2026" : "Save"}
         </button>
+        <button type="button" onClick={handleCopyJson} className="px-4 py-2 rounded border border-slate-600 text-slate-300 text-sm">
+          {copyStatus === "copied" ? "Copied!" : copyStatus === "error" ? "Copy failed" : "Copy JSON"}
+        </button>
       </div>
 
       <p className="max-w-md mx-auto mt-4 text-xs text-slate-500">Click a tile to place the selected tool. Click again to clear or replace it.</p>
+      <p className="max-w-md mx-auto mt-1 text-xs text-slate-500">
+        "Save" only works when this is pasted into a Claude.ai artifact. Running it locally, use "Copy JSON" and hand the level definition to Claude Code to add it to BUILT_IN_LEVELS.
+      </p>
     </div>
   );
 }

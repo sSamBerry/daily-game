@@ -764,7 +764,7 @@ function EnemyFacing({ dir }) {
         pointerEvents: "none",
       }}
     >
-      <path d="M12 2 L19.5 16 L12 12 L4.5 16 Z" fill="#ef4444" stroke="#ffffff" strokeWidth="1" strokeLinejoin="round" />
+      <path d="M12 2 L19.5 16 L12 12 L4.5 16 Z" fill="#ef4444" />
     </svg>
   );
 }
@@ -970,15 +970,20 @@ function RulesModal({ onClose }) {
         <RuleRow
           title="Turn order"
           swatch={
-            <div
-              className="rounded-full flex items-center justify-center"
-              style={{ width: 20, height: 20, background: "#1c1917", border: "1.5px solid #5eead4", color: "#5eead4", fontSize: 11, fontWeight: 900 }}
-            >
-              1
+            <div className="flex items-center gap-1">
+              <div
+                className="rounded-full flex items-center justify-center"
+                style={{ width: 20, height: 20, background: "#1c1917", border: "1.5px solid #5eead4", color: "#5eead4", fontSize: 11, fontWeight: 900 }}
+              >
+                1
+              </div>
+              <div className="rounded-full bg-red-500 flex items-center justify-center text-white" style={{ width: 20, height: 20, fontSize: 11, fontWeight: 900 }}>
+                1
+              </div>
             </div>
           }
         >
-          Pieces act in the order you placed them on the board, then every surviving enemy fires.
+          Pieces act in the order you placed them, then enemies fire in numeric order — the number on each red circle is its turn.
         </RuleRow>
 
         <button type="button" onClick={onClose} className="w-full mt-1 py-2.5 rounded-lg bg-teal-600 text-white font-bold">
@@ -1721,8 +1726,12 @@ function PlayScreen({ level, onBack }) {
         })}
       </div>
 
-      <div className="mt-4 w-full max-w-md mx-auto">
-        <div data-hand className="w-full flex flex-wrap gap-3 p-3 rounded-lg border-2 border-stone-600 bg-stone-800 min-h-16">
+      <div className="mt-4 mx-auto" style={{ width: "100%", maxWidth: 448 }}>
+        <div
+          data-hand
+          className="flex flex-wrap gap-3 p-3 rounded-lg border-2 border-stone-600 bg-stone-800"
+          style={{ width: "100%", minHeight: 78, boxSizing: "border-box" }}
+        >
           {handUnits.map((unit) => (
             <div key={unit.id} className="flex flex-col items-center gap-1">
               <div
