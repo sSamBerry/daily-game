@@ -141,12 +141,12 @@ function movePreviewTiles(state) {
         if (destX >= 0 && destX < SIZE && destY >= 0 && destY < SIZE) {
           const colliding = state.enemies.find((e) => e.id !== adj.e.id && e.alive && e.x === destX && e.y === destY);
           const blocked = !colliding && occupiedSet(state, null).has(key(destX, destY));
-          out.push({ x: destX, y: destY, kind: colliding ? "collision" : blocked ? "blocked" : "land" });
+          out.push({ x: destX, y: destY, kind: colliding ? "collision" : blocked ? "blocked" : "land", unitId: unit.id });
         }
       }
     } else if (unit.ability === "pull") {
       const result = resolvePull(state, unit);
-      if (result) out.push({ x: result.landX, y: result.landY, kind: result.collideWith ? "collision" : "land" });
+      if (result) out.push({ x: result.landX, y: result.landY, kind: result.collideWith ? "collision" : "land", unitId: unit.id });
     }
   }
   return out;
@@ -674,6 +674,18 @@ function getCurrentStreak() {
   }
 }
 
+function hasWonToday() {
+  try {
+    const raw = localStorage.getItem("puzzlelab_streak");
+    if (!raw) return false;
+    const data = JSON.parse(raw);
+    const today = new Date().toISOString().slice(0, 10);
+    return data.lastDate === today;
+  } catch (e) {
+    return false;
+  }
+}
+
 const SLIDE = "left 0.6s ease, top 0.6s ease, opacity 0.4s ease, transform 0.4s ease";
 function dirAngle(dir) {
   if (dir.dx === 1) return 0;
@@ -745,14 +757,15 @@ function EnemyFacing({ dir }) {
         position: "absolute",
         top: "50%",
         left: "50%",
-        width: 18,
-        height: 18,
-        transform: `translate(-50%, -50%) rotate(${upBasedAngle(dir)}deg) translateY(-15px)`,
-        filter: "drop-shadow(0 1px 1.5px rgba(0,0,0,0.85))",
+        width: 27,
+        height: 27,
+        transform: `translate(-50%, -50%) rotate(${upBasedAngle(dir)}deg) translateY(-18px)`,
+        filter: "drop-shadow(0 1px 2px rgba(0,0,0,0.7))",
         pointerEvents: "none",
       }}
     >
-      <path d="M12 2 L19.5 16 L12 12 L4.5 16 Z" fill="#ffffff" stroke="#7f1d1d" strokeWidth="0.8" strokeLinejoin="round" />
+      <line x1="12" y1="21" x2="12" y2="13.5" stroke="#ef4444" strokeWidth="3" strokeLinecap="round" />
+      <path d="M12 1 L20.5 14 L3.5 14 Z" fill="#ef4444" stroke="#ffffff" strokeWidth="1.4" strokeLinejoin="round" />
     </svg>
   );
 }
@@ -962,6 +975,7 @@ function PlayScreen({ level, onBack }) {
   const [hoverTile, setHoverTile] = useState(null);
   const [streak, setStreak] = useState(null);
   const [headerStreak, setHeaderStreak] = useState(0);
+  const [wonToday, setWonToday] = useState(false);
   const [showRules, setShowRules] = useState(false);
   const placementCounterRef = useRef(0);
 
@@ -972,13 +986,14 @@ function PlayScreen({ level, onBack }) {
     setRevealStep(0);
     setStreak(null);
     setHeaderStreak(getCurrentStreak());
+    setWonToday(hasWonToday());
     placementCounterRef.current = 0;
   }, [level]);
 
   useEffect(() => {
     if (phase !== "resolving" || !resolution) return;
     if (revealStep >= resolution.snapshots.length - 1) {
-      const t = setTimeout(() => setPhase("done"), 500);
+      const t = setTimeout(() => setPhase("done"), 1000);
       return () => clearTimeout(t);
     }
     const t = setTimeout(() => setRevealStep((r) => r + 1), 1000);
@@ -990,6 +1005,7 @@ function PlayScreen({ level, onBack }) {
       recordWinAndGetStreak().then((s) => {
         setStreak(s);
         setHeaderStreak(s);
+        setWonToday(true);
       });
     }
   }, [phase, resolution]);
@@ -1072,6 +1088,23 @@ function PlayScreen({ level, onBack }) {
   const flashTile = phase === "resolving" && resolution && revealStep > 0 ? resolution.impacts[revealStep - 1] : null;
   const activeActor = phase === "resolving" && resolution && revealStep > 0 ? resolution.actors[revealStep - 1] : null;
   const draggedUnit = drag ? gameState.units.find((u) => u.id === drag.unitId) : null;
+
+  // The enemy firing on the currently displayed step, resolved against the
+  // state just before its shot (so its ray/target are still accurate) —
+  // drives a small traveling "bullet" so it's easy to see what hit what.
+  const activeEnemyRay =
+    phase === "resolving" && activeActor && activeActor.type === "enemy"
+      ? (() => {
+          const beforeState = resolution.snapshots[revealStep - 1];
+          const enemy = beforeState.enemies.find((e) => e.id === activeActor.id);
+          if (!enemy || !enemy.alive) return null;
+          const ray = threatRay(beforeState, enemy);
+          return ray.tiles.length > 0 ? { enemy, ...ray } : null;
+        })()
+      : null;
+  // Impact bursts wait for the bullet to actually arrive instead of popping
+  // instantly.
+  const flashDelay = activeEnemyRay ? 0.32 : 0;
 
   // Enemies that have already fired their attack, as of the currently displayed
   // snapshot. Once an enemy is in this set it stops contributing any threat
@@ -1171,7 +1204,8 @@ function PlayScreen({ level, onBack }) {
       const previews = movePreviewTiles(previewState);
       const match = previews.find((p) => p.x === x && p.y === y);
       if (match && match.kind === "collision") return { level: "bold", category: "collision" };
-      if (match && match.kind === "land") return { level: "bold", category: "land" };
+      // A plain "land" preview (no collision) isn't a threat — it's drawn as
+      // its own faded circle marker instead of a tile-background color.
     }
     return null;
   }
@@ -1200,11 +1234,8 @@ function PlayScreen({ level, onBack }) {
     else if (threat.level === "bold") {
       // A single strong red for any live threat — miss, hit-a-building,
       // hit-a-unit, or beam-on-beam collision — so it's always clearly
-      // visible even when the ray doesn't land on anything. "land" is not
-      // a threat, it's just the tile a pushed/pulled enemy will move to,
-      // so it keeps its own distinct color.
-      if (threat.category === "land") variant = "border-2 border-sky-500 bg-sky-900";
-      else variant = "border-2 border-red-500 bg-red-900";
+      // visible even when the ray doesn't land on anything.
+      variant = "border-2 border-red-500 bg-red-900";
     } else {
       // light preview — a single pale red, always, regardless of what the
       // post-move ray happens to hit. This keeps it reading as "a future
@@ -1279,6 +1310,13 @@ function PlayScreen({ level, onBack }) {
     phase === "planning"
       ? actionPreviewLines(previewState).filter((l) => !(draggedUnit && draggedUnit.onBoard && l.fromX === draggedUnit.x && l.fromY === draggedUnit.y))
       : [];
+  // Where a pushed/pulled enemy would land, shown as a faded red circle
+  // rather than a tile highlight — it's not a threat, just a preview of
+  // where that enemy is about to end up.
+  const landPreviewTiles =
+    phase === "planning"
+      ? movePreviewTiles(previewState).filter((p) => p.kind === "land" && !(draggedUnit && p.unitId === draggedUnit.id))
+      : [];
 
   // The badge shown to the player is always a compact 1..N rank among the
   // currently placed units, even though the underlying `order` field (used
@@ -1288,6 +1326,17 @@ function PlayScreen({ level, onBack }) {
   sortedByPlacement(gameState.units)
     .filter((u) => u.onBoard)
     .forEach((u, i) => placementRankById.set(u.id, i + 1));
+
+  // Index (into resolution.actors/snapshots) of each unit's own turn, so a
+  // Pusher's facing arrow can be "locked" to the direction it fired once its
+  // turn has played, instead of recomputing live and snapping back to
+  // unrotated once the target it pushed is no longer adjacent.
+  const unitActionIndexById = new Map();
+  if (resolution) {
+    resolution.actors.forEach((a, i) => {
+      if (a && a.type === "unit") unitActionIndexById.set(a.id, i);
+    });
+  }
 
   return (
     <div className="bg-stone-900 p-6 rounded-xl">
@@ -1305,7 +1354,15 @@ function PlayScreen({ level, onBack }) {
         {!onBack && (
           <div
             className="shrink-0 flex items-center gap-1 rounded-full border-2 border-stone-600 text-stone-200 font-bold"
-            style={{ position: "absolute", left: 0, height: 32, padding: "0 10px", fontSize: 13 }}
+            style={{
+              position: "absolute",
+              left: 0,
+              height: 32,
+              padding: "0 10px",
+              fontSize: 13,
+              ...(wonToday ? { borderColor: "#facc15", boxShadow: "0 0 8px 1px rgba(250,204,21,0.55)" } : null),
+            }}
+            title={wonToday ? "Today's puzzle solved" : "Current streak"}
           >
             <span style={{ fontSize: 14, lineHeight: 1 }}>🔥</span>
             {headerStreak}
@@ -1410,6 +1467,36 @@ function PlayScreen({ level, onBack }) {
               </g>
             );
           })}
+          {landPreviewTiles.map((p, i) => (
+            <circle
+              key={`land-${i}`}
+              cx={p.x + 0.5}
+              cy={p.y + 0.5}
+              r="0.3"
+              fill="rgba(239,68,68,0.3)"
+              stroke="rgba(248,113,113,0.75)"
+              strokeWidth="0.05"
+            />
+          ))}
+          {activeEnemyRay && (
+            <circle key={`bullet-${revealStep}`} r="0.1" fill="#fde047" stroke="#f97316" strokeWidth="0.035">
+              <animate
+                attributeName="cx"
+                from={activeEnemyRay.enemy.x + 0.5}
+                to={activeEnemyRay.tiles[activeEnemyRay.tiles.length - 1].x + 0.5}
+                dur="0.32s"
+                fill="freeze"
+              />
+              <animate
+                attributeName="cy"
+                from={activeEnemyRay.enemy.y + 0.5}
+                to={activeEnemyRay.tiles[activeEnemyRay.tiles.length - 1].y + 0.5}
+                dur="0.32s"
+                fill="freeze"
+              />
+              <animate attributeName="opacity" values="1;1;0" keyTimes="0;0.85;1" dur="0.32s" fill="freeze" />
+            </circle>
+          )}
           {flashTile && flashTile.kind === "kill" && (
             <g key={`flash-${revealStep}`}>
               {[0, 60, 120, 180, 240, 300].map((angle) => (
@@ -1426,12 +1513,40 @@ function PlayScreen({ level, onBack }) {
                       transformBox: "fill-box",
                       transformOrigin: "50% 100%",
                       animation: "impactShard 0.45s ease-out",
+                      animationDelay: `${flashDelay}s`,
+                      animationFillMode: "backwards",
                     }}
                   />
                 </g>
               ))}
-              <circle cx={flashTile.x + 0.5} cy={flashTile.y + 0.5} r="0.42" fill="none" stroke="#f97316" strokeWidth="0.07" style={{ transformBox: "fill-box", transformOrigin: "center", animation: "impactRingKill 0.5s ease-out" }} />
-              <circle cx={flashTile.x + 0.5} cy={flashTile.y + 0.5} r="0.2" fill="#fde047" style={{ transformBox: "fill-box", transformOrigin: "center", animation: "impactCoreKill 0.5s ease-out" }} />
+              <circle
+                cx={flashTile.x + 0.5}
+                cy={flashTile.y + 0.5}
+                r="0.42"
+                fill="none"
+                stroke="#f97316"
+                strokeWidth="0.07"
+                style={{
+                  transformBox: "fill-box",
+                  transformOrigin: "center",
+                  animation: "impactRingKill 0.5s ease-out",
+                  animationDelay: `${flashDelay}s`,
+                  animationFillMode: "backwards",
+                }}
+              />
+              <circle
+                cx={flashTile.x + 0.5}
+                cy={flashTile.y + 0.5}
+                r="0.2"
+                fill="#fde047"
+                style={{
+                  transformBox: "fill-box",
+                  transformOrigin: "center",
+                  animation: "impactCoreKill 0.5s ease-out",
+                  animationDelay: `${flashDelay}s`,
+                  animationFillMode: "backwards",
+                }}
+              />
             </g>
           )}
           {flashTile && flashTile.kind === "move" && (
@@ -1505,7 +1620,19 @@ function PlayScreen({ level, onBack }) {
           const isRotatorAbility = unit.ability === "rotate" || unit.ability === "rotate_ccw";
           const isActingRotator = isActing && isRotatorAbility;
           const isArmedRotator = phase === "planning" && isRotatorAbility && !!findPushTarget(gameState, displayUnit);
-          const facingAngle = pusherFacingAngle(displayState, displayUnit);
+          let facingAngle = pusherFacingAngle(displayState, displayUnit);
+          if (phase !== "planning" && resolution && unit.ability === "push") {
+            const actionIndex = unitActionIndexById.get(unit.id);
+            // Once this Pusher's own turn has played, freeze its facing at
+            // the direction it actually fired in — recomputing live would
+            // snap it back to unrotated the moment the pushed enemy is no
+            // longer adjacent.
+            if (actionIndex !== undefined && revealStep > actionIndex) {
+              const beforeState = resolution.snapshots[actionIndex];
+              const beforeUnit = beforeState.units.find((u) => u.id === unit.id);
+              facingAngle = pusherFacingAngle(beforeState, beforeUnit);
+            }
+          }
           return (
             <div
               key={unit.id}
