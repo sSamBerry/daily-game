@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { RotateCcw, Magnet } from "lucide-react";
+import { RotateCcw, ArrowLeft, Plus, Trash2, Pencil, Eraser, Magnet } from "lucide-react";
 
 const SIZE = 8;
 
@@ -9,6 +9,15 @@ function clone(s) {
 function key(x, y) {
   return x + "," + y;
 }
+function joinNames(names) {
+  if (names.length <= 1) return names[0] || "";
+  if (names.length === 2) return names.join(" and ");
+  return names.slice(0, -1).join(", ") + ", and " + names[names.length - 1];
+}
+function uid(prefix) {
+  return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+}
+
 function isWall(state, x, y) {
   return state.walls.some((w) => w.x === x && w.y === y);
 }
@@ -626,28 +635,64 @@ const BUILT_IN_LEVELS = [
   },
 ];
 
-// Streak tracking, rewritten for a real browser: Claude's `window.storage`
-// API only exists inside Claude's own artifact sandbox. On a real deployed
-// site this uses plain `localStorage` instead — synchronous under the hood,
-// but kept as an async function so the call site (PlayScreen) doesn't change.
+function blankLevel() {
+  return { id: null, name: "New level", hint: "", units: [], enemies: [], buildings: [], walls: [], conveyors: [] };
+}
+
+async function loadCustomLevels() {
+  try {
+    const listResult = await window.storage.list("level:", false);
+    const keys = listResult ? listResult.keys : [];
+    const loaded = [];
+    for (const k of keys) {
+      try {
+        const res = await window.storage.get(k, false);
+        if (res && res.value) loaded.push(JSON.parse(res.value));
+      } catch (e) {
+        // key missing or unreadable, skip
+      }
+    }
+    return loaded;
+  } catch (e) {
+    return [];
+  }
+}
+
+async function saveCustomLevel(level) {
+  const id = level.id || uid("level");
+  const toSave = { ...level, id };
+  await window.storage.set("level:" + id, JSON.stringify(toSave), false);
+  return toSave;
+}
+
+async function deleteCustomLevel(id) {
+  try {
+    await window.storage.delete("level:" + id, false);
+  } catch (e) {
+    // already gone
+  }
+}
+
 async function recordWinAndGetStreak() {
   const today = new Date().toISOString().slice(0, 10);
   let streak = 1;
   try {
-    const raw = localStorage.getItem("puzzlelab_streak");
-    if (raw) {
-      const data = JSON.parse(raw);
-      if (data.lastDate === today) return data.streak;
+    const res = await window.storage.get("streak", false);
+    if (res && res.value) {
+      const data = JSON.parse(res.value);
+      if (data.lastDate === today) {
+        return data.streak;
+      }
       const y = new Date();
       y.setDate(y.getDate() - 1);
       const yesterday = y.toISOString().slice(0, 10);
       streak = data.lastDate === yesterday ? data.streak + 1 : 1;
     }
   } catch (e) {
-    // no streak recorded yet, or localStorage unavailable — start at 1
+    // no streak recorded yet
   }
   try {
-    localStorage.setItem("puzzlelab_streak", JSON.stringify({ lastDate: today, streak }));
+    await window.storage.set("streak", JSON.stringify({ lastDate: today, streak }), false);
   } catch (e) {
     // ignore write failure, still show the computed streak
   }
@@ -655,6 +700,12 @@ async function recordWinAndGetStreak() {
 }
 
 const SLIDE = "left 0.6s ease, top 0.6s ease, opacity 0.4s ease, transform 0.4s ease";
+const DIRS = [
+  { label: "up", dx: 0, dy: -1, glyph: "\u2191" },
+  { label: "right", dx: 1, dy: 0, glyph: "\u2192" },
+  { label: "down", dx: 0, dy: 1, glyph: "\u2193" },
+  { label: "left", dx: -1, dy: 0, glyph: "\u2190" },
+];
 function dirAngle(dir) {
   if (dir.dx === 1) return 0;
   if (dir.dx === -1) return 180;
@@ -1067,11 +1118,9 @@ function PlayScreen({ level, onBack }) {
     <div className="bg-slate-900 p-6 rounded-xl">
       <div className="max-w-md mx-auto mb-4 flex items-center justify-between gap-3">
         <h2 className="text-white font-black tracking-tight" style={{ fontSize: 24 }}>{level.name}</h2>
-        {onBack && (
-          <button type="button" onClick={onBack} className="shrink-0 p-2 rounded-md border-2 border-slate-600 text-slate-200">
-            Menu
-          </button>
-        )}
+        <button type="button" onClick={onBack} className="shrink-0 p-2 rounded-md border-2 border-slate-600 text-slate-200">
+          <ArrowLeft className="w-5 h-5" />
+        </button>
       </div>
 
       <div className="relative w-full max-w-md mx-auto" style={{ aspectRatio: "1 / 1" }}>
@@ -1350,16 +1399,13 @@ function PlayScreen({ level, onBack }) {
             ) : (
               <p className="text-red-400 font-black mb-6" style={{ fontSize: 26 }}>Lost</p>
             )}
-            {!onBack && <p className="text-slate-500 text-xs font-bold mb-4">Come back tomorrow for the next puzzle.</p>}
             <div className="flex gap-2 justify-center">
               <button type="button" onClick={reset} className="flex-1 py-2.5 rounded-lg bg-teal-600 text-white font-bold flex items-center justify-center gap-1">
                 <RotateCcw className="w-5 h-5" /> Reset
               </button>
-              {onBack && (
-                <button type="button" onClick={onBack} className="px-4 py-2.5 rounded-lg border-2 border-slate-500 text-slate-200 font-bold">
-                  Menu
-                </button>
-              )}
+              <button type="button" onClick={onBack} className="px-4 py-2.5 rounded-lg border-2 border-slate-500 text-slate-200 font-bold">
+                Menu
+              </button>
             </div>
           </div>
         </div>
@@ -1377,42 +1423,485 @@ function PlayScreen({ level, onBack }) {
   );
 }
 
-// --- Daily puzzle selection ---------------------------------------------
-//
-// No backend needed: every visitor's browser computes the same "day index"
-// from today's date, and indexes into the same ordered level list — so
-// everyone sees the same puzzle on the same day (like Wordle), purely
-// client-side.
-//
-// LAUNCH_DATE is day 1. Change this once, when you actually launch, and
-// never change it again — moving it later would shift which puzzle
-// everyone sees on a given day.
-const LAUNCH_DATE = "2026-08-19"; // YYYY-MM-DD, treated as UTC midnight
+function EditorScreen({ initialLevel, onBack, onSaved, onTest }) {
+  const [draft, setDraft] = useState(() => clone(initialLevel));
+  const [tool, setTool] = useState("wall");
+  const [toolDir, setToolDir] = useState(DIRS[1]);
+  const [saving, setSaving] = useState(false);
+  const [aimDrag, setAimDrag] = useState(null);
+  const [aimPreview, setAimPreview] = useState(null);
+  const paintingRef = useRef(false);
+  const lastPaintedKeyRef = useRef(null);
 
-function dayIndexSince(launchDateStr) {
-  const start = new Date(launchDateStr + "T00:00:00Z").getTime();
-  const now = new Date();
-  const today = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
-  const diffDays = Math.floor((today - start) / 86400000);
-  return Math.max(0, diffDays);
-}
+  function clearTile(next, x, y) {
+    next.walls = next.walls.filter((w) => !(w.x === x && w.y === y));
+    next.conveyors = next.conveyors.filter((c) => !(c.x === x && c.y === y));
+    next.buildings = next.buildings.filter((b) => !(b.x === x && b.y === y));
+    next.enemies = next.enemies.filter((e) => !(e.x === x && e.y === y));
+  }
 
-function pickDailyLevel(levels, launchDateStr) {
-  const dayIndex = dayIndexSince(launchDateStr);
-  // Cycles through your level list. Add more levels over time so it
-  // doesn't visibly repeat — see the README for how to extend this.
-  const level = levels[dayIndex % levels.length];
-  return { level, dayNumber: dayIndex + 1 };
-}
+  function applyToolAt(x, y) {
+    setDraft((prev) => {
+      const next = clone(prev);
+      clearTile(next, x, y);
+      if (tool === "wall") next.walls.push({ x, y });
+      else if (tool === "conveyor") next.conveyors.push({ x, y, dir: { dx: toolDir.dx, dy: toolDir.dy } });
+      else if (tool === "building") next.buildings.push({ id: uid("b"), name: `Structure ${next.buildings.length + 1}`, x, y });
+      else if (tool === "enemy")
+        next.enemies.push({ id: uid("e"), name: `Enemy ${next.enemies.length + 1}`, x, y, dir: { dx: 1, dy: 0 }, range: 3 });
+      return next;
+    });
+  }
 
-export default function DailyPuzzleApp() {
-  const { level, dayNumber } = pickDailyLevel(BUILT_IN_LEVELS, LAUNCH_DATE);
+  function eraseAt(x, y) {
+    setDraft((prev) => {
+      const next = clone(prev);
+      clearTile(next, x, y);
+      return next;
+    });
+  }
+
+  function onTilePointerDown(e, x, y) {
+    e.preventDefault();
+    const existingEnemy = draft.enemies.find((en) => en.x === x && en.y === y);
+    if (existingEnemy && tool !== "eraser") {
+      setAimDrag({ enemyId: existingEnemy.id, startX: x, startY: y });
+      setAimPreview(null);
+      return;
+    }
+    paintingRef.current = true;
+    lastPaintedKeyRef.current = key(x, y);
+    if (tool === "eraser") eraseAt(x, y);
+    else applyToolAt(x, y);
+  }
+
+  useEffect(() => {
+    function onMove(e) {
+      if (!paintingRef.current) return;
+      const el = document.elementFromPoint(e.clientX, e.clientY);
+      const tileEl = el && el.closest("[data-tile-editor]");
+      if (!tileEl) return;
+      const x = Number(tileEl.dataset.x);
+      const y = Number(tileEl.dataset.y);
+      const k = key(x, y);
+      if (k === lastPaintedKeyRef.current) return;
+      lastPaintedKeyRef.current = k;
+      if (tool === "eraser") eraseAt(x, y);
+      else if (tool !== "enemy") applyToolAt(x, y);
+    }
+    function onUp() {
+      paintingRef.current = false;
+      lastPaintedKeyRef.current = null;
+    }
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    return () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+    };
+  }, [tool, toolDir]);
+
+  useEffect(() => {
+    if (!aimDrag) return;
+    function onMove(e) {
+      const el = document.elementFromPoint(e.clientX, e.clientY);
+      const tileEl = el && el.closest("[data-tile-editor]");
+      if (!tileEl) return;
+      const x = Number(tileEl.dataset.x);
+      const y = Number(tileEl.dataset.y);
+      const dx = x - aimDrag.startX;
+      const dy = y - aimDrag.startY;
+      if (dx === 0 && dy === 0) {
+        setAimPreview(null);
+        return;
+      }
+      let dir, range;
+      if (Math.abs(dx) >= Math.abs(dy)) {
+        dir = { dx: dx > 0 ? 1 : -1, dy: 0 };
+        range = Math.max(1, Math.min(8, Math.abs(dx)));
+      } else {
+        dir = { dx: 0, dy: dy > 0 ? 1 : -1 };
+        range = Math.max(1, Math.min(8, Math.abs(dy)));
+      }
+      setAimPreview({ dir, range });
+    }
+    function onUp() {
+      setAimPreview((preview) => {
+        if (preview) {
+          setDraft((prev) => {
+            const next = clone(prev);
+            const enemy = next.enemies.find((en) => en.id === aimDrag.enemyId);
+            if (enemy) {
+              enemy.dir = preview.dir;
+              enemy.range = preview.range;
+            }
+            return next;
+          });
+        }
+        return null;
+      });
+      setAimDrag(null);
+    }
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    return () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+    };
+  }, [aimDrag]);
+
+  function addUnit(ability) {
+    setDraft((prev) => {
+      const next = clone(prev);
+      const label =
+        ability === "push"
+          ? "Pusher"
+          : ability === "pull"
+          ? "Puller"
+          : ability === "rotate"
+          ? "Rotator"
+          : ability === "rotate_ccw"
+          ? "Counter-rotator"
+          : "Blocker";
+      const count = next.units.filter((u) => u.ability === ability).length + 1;
+      next.units.push({ id: uid("u"), name: count > 1 ? `${label} ${count}` : label, ability });
+      return next;
+    });
+  }
+  function removeUnit(id) {
+    setDraft((prev) => ({ ...prev, units: prev.units.filter((u) => u.id !== id) }));
+  }
+
+  async function handleSave() {
+    setSaving(true);
+    const saved = await saveCustomLevel(draft);
+    setDraft(saved);
+    setSaving(false);
+    onSaved(saved);
+  }
+
+  const tiles = [];
+  for (let y = 0; y < SIZE; y++) for (let x = 0; x < SIZE; x++) tiles.push({ x, y });
+
+  const previewTiles = [];
+  if (aimDrag && aimPreview) {
+    let x = aimDrag.startX;
+    let y = aimDrag.startY;
+    for (let i = 0; i < aimPreview.range; i++) {
+      x += aimPreview.dir.dx;
+      y += aimPreview.dir.dy;
+      if (x < 0 || x >= SIZE || y < 0 || y >= SIZE) break;
+      previewTiles.push({ x, y });
+    }
+  }
+
+  function tileClass(x, y) {
+    const isAimStart = aimDrag && aimDrag.startX === x && aimDrag.startY === y;
+    const inPreview = previewTiles.some((t) => t.x === x && t.y === y);
+    if (isAimStart) return "relative aspect-square flex items-center justify-center rounded-sm border-2 border-teal-400 bg-teal-900";
+    if (inPreview) return "relative aspect-square flex items-center justify-center rounded-sm border-2 border-amber-400 bg-amber-900";
+    return "relative aspect-square flex items-center justify-center rounded-sm border-2 border-slate-700 bg-slate-800";
+  }
+
+  function tileContent(x, y) {
+    const wall = draft.walls.find((w) => w.x === x && w.y === y);
+    const conv = draft.conveyors.find((c) => c.x === x && c.y === y);
+    const b = draft.buildings.find((b) => b.x === x && b.y === y);
+    const e = draft.enemies.find((e) => e.x === x && e.y === y);
+    return (
+      <>
+        <TerrainMark wall={!!wall} conveyor={conv} />
+        {b && <div className="rounded-sm" style={{ width: "52%", height: "52%", zIndex: 1, position: "relative", background: "#f8fafc" }} />}
+        {e && (
+          <div style={{ width: "62%", height: "62%", zIndex: 1, position: "relative" }}>
+            <div className="rounded-full bg-red-500 flex items-center justify-center text-white w-full h-full" style={{ fontSize: 14, fontWeight: 900 }}>
+              {e.range}
+            </div>
+            <EnemyFacing dir={e.dir} />
+          </div>
+        )}
+      </>
+    );
+  }
+
+  const toolSwatchClass = "w-11 h-11 rounded-md flex items-center justify-center border-2 transition-colors";
+
   return (
-    <div style={{ minHeight: "100vh", background: "#0f172a", display: "flex", flexDirection: "column", alignItems: "center", paddingTop: 24, paddingBottom: 24 }}>
-      <p className="text-slate-500 font-bold text-xs mb-2" style={{ letterSpacing: 1 }}>PUZZLE #{dayNumber}</p>
-      <div className="w-full max-w-md px-4">
-        <PlayScreen level={level} onBack={null} />
+    <div className="bg-slate-900 p-6 rounded-xl">
+      <div className="max-w-md mx-auto mb-4 flex items-center justify-between gap-3">
+        <input
+          value={draft.name}
+          onChange={(e) => setDraft((prev) => ({ ...prev, name: e.target.value }))}
+          className="bg-transparent text-white font-black border-b-2 border-slate-700 focus:outline-none focus:border-teal-500 flex-1"
+          style={{ fontSize: 22 }}
+          placeholder="Level name"
+        />
+        <button type="button" onClick={onBack} className="shrink-0 p-2 rounded-md border-2 border-slate-600 text-slate-200">
+          <ArrowLeft className="w-5 h-5" />
+        </button>
+      </div>
+
+      <input
+        value={draft.hint}
+        onChange={(e) => setDraft((prev) => ({ ...prev, hint: e.target.value }))}
+        className="w-full max-w-md mx-auto block bg-slate-800 border-2 border-slate-700 rounded-md px-3 py-2 text-sm text-slate-200 font-bold mb-4"
+        placeholder="One-line hint shown to the player"
+      />
+
+      <div className="max-w-md mx-auto mb-2 flex items-center gap-2 flex-wrap">
+        <button type="button" onClick={() => setTool("eraser")} className={`${toolSwatchClass} ${tool === "eraser" ? "border-teal-400" : "border-slate-700"} bg-slate-800`}>
+          <Eraser className="w-5 h-5 text-slate-200" />
+        </button>
+        <button type="button" onClick={() => setTool("wall")} className={`${toolSwatchClass} ${tool === "wall" ? "border-teal-400" : "border-slate-700"}`} style={{ background: "#020617" }} />
+        <button type="button" onClick={() => setTool("conveyor")} className={`${toolSwatchClass} ${tool === "conveyor" ? "border-teal-400" : "border-slate-700"}`} style={{ background: "#78350f" }}>
+          <span style={{ color: "#fbbf24", fontSize: 16, transform: `rotate(${dirAngle(toolDir)}deg)` }}>{"\u27A4"}</span>
+        </button>
+        <button type="button" onClick={() => setTool("building")} className={`${toolSwatchClass} ${tool === "building" ? "border-teal-400" : "border-slate-700"} bg-slate-800`}>
+          <div className="rounded-sm" style={{ width: 18, height: 18, background: "#f8fafc" }} />
+        </button>
+        <button type="button" onClick={() => setTool("enemy")} className={`${toolSwatchClass} ${tool === "enemy" ? "border-teal-400" : "border-slate-700"} bg-slate-800`}>
+          <div className="rounded-full bg-red-500" style={{ width: 20, height: 20 }} />
+        </button>
+
+        {tool === "conveyor" && (
+          <div className="flex items-center gap-1 ml-2">
+            {DIRS.map((d) => (
+              <button
+                key={d.label}
+                type="button"
+                onClick={() => setToolDir(d)}
+                className={`w-8 h-8 rounded-md font-bold flex items-center justify-center border-2 ${
+                  toolDir.label === d.label ? "border-teal-400 text-teal-300" : "border-slate-700 text-slate-400"
+                }`}
+              >
+                {d.glyph}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <p className="max-w-md mx-auto mb-3 text-slate-400 font-bold" style={{ fontSize: 12 }}>
+        Hold and drag to paint. Drag from a placed enemy to aim it.
+      </p>
+
+      <style>{`
+        @keyframes beltStripes { to { background-position: -13px 0; } }
+      `}</style>
+      <div className="relative w-full max-w-md mx-auto" style={{ aspectRatio: "1 / 1" }}>
+        <div className="grid grid-cols-8 gap-1 w-full h-full select-none">
+          {tiles.map(({ x, y }) => (
+            <button
+              key={key(x, y)}
+              type="button"
+              data-tile-editor
+              data-x={x}
+              data-y={y}
+              onPointerDown={(e) => onTilePointerDown(e, x, y)}
+              className={tileClass(x, y)}
+              style={{ touchAction: "none" }}
+            >
+              {tileContent(x, y)}
+            </button>
+          ))}
+        </div>
+        {aimDrag && aimPreview && (
+          <svg className="absolute inset-0" viewBox={`0 0 ${SIZE} ${SIZE}`} preserveAspectRatio="none" style={{ pointerEvents: "none" }}>
+            <line
+              x1={aimDrag.startX + 0.5}
+              y1={aimDrag.startY + 0.5}
+              x2={aimDrag.startX + 0.5 + aimPreview.dir.dx * aimPreview.range}
+              y2={aimDrag.startY + 0.5 + aimPreview.dir.dy * aimPreview.range}
+              stroke="#fbbf24"
+              strokeWidth="0.08"
+              strokeLinecap="round"
+            />
+          </svg>
+        )}
+      </div>
+
+      <div className="mt-4 max-w-md mx-auto">
+        <p className="text-xs text-slate-500 mb-1">Units in hand</p>
+        <div className="flex flex-wrap gap-2 p-3 rounded-md border border-dashed border-slate-700 min-h-14">
+          {draft.units.map((u) => (
+            <span key={u.id} className="flex items-center gap-1 bg-slate-800 border border-slate-700 rounded px-2 py-1 text-xs text-slate-300">
+              <span
+                className="flex items-center justify-center rounded"
+                style={{ width: 16, height: 16, background: "#0d9488", color: "#fff", fontSize: 11, fontWeight: 900 }}
+              >
+                <UnitIcon unit={u} size={11} />
+              </span>
+              {u.name}
+              <button type="button" onClick={() => removeUnit(u.id)} className="text-slate-500 hover:text-red-400 ml-1">
+                <Trash2 className="w-3 h-3" />
+              </button>
+            </span>
+          ))}
+        </div>
+        <div className="flex gap-2 mt-2">
+          <button type="button" onClick={() => addUnit("push")} className="flex items-center gap-1 px-2 py-1 rounded border border-slate-600 text-xs text-slate-300">
+            <Plus className="w-3 h-3" /> Pusher
+          </button>
+          <button type="button" onClick={() => addUnit("pull")} className="flex items-center gap-1 px-2 py-1 rounded border border-slate-600 text-xs text-slate-300">
+            <Plus className="w-3 h-3" /> Puller
+          </button>
+          <button type="button" onClick={() => addUnit("block")} className="flex items-center gap-1 px-2 py-1 rounded border border-slate-600 text-xs text-slate-300">
+            <Plus className="w-3 h-3" /> Blocker
+          </button>
+          <button type="button" onClick={() => addUnit("rotate")} className="flex items-center gap-1 px-2 py-1 rounded border border-slate-600 text-xs text-slate-300">
+            <Plus className="w-3 h-3" /> Rotator
+          </button>
+          <button type="button" onClick={() => addUnit("rotate_ccw")} className="flex items-center gap-1 px-2 py-1 rounded border border-slate-600 text-xs text-slate-300">
+            <Plus className="w-3 h-3" /> Counter-rotator
+          </button>
+        </div>
+      </div>
+
+      <div className="mt-4 max-w-md mx-auto flex gap-2">
+        <button type="button" onClick={() => onTest(draft)} className="flex-1 py-2 rounded bg-teal-600 text-white text-sm font-medium">
+          Test play
+        </button>
+        <button type="button" onClick={handleSave} disabled={saving} className="px-4 py-2 rounded border border-slate-600 text-slate-300 text-sm">
+          {saving ? "Saving\u2026" : "Save"}
+        </button>
+      </div>
+
+      <p className="max-w-md mx-auto mt-4 text-xs text-slate-500">Click a tile to place the selected tool. Click again to clear or replace it.</p>
+    </div>
+  );
+}
+
+function LevelRow({ level, onPlay, onEdit, onDelete }) {
+  return (
+    <div className="flex items-center justify-between gap-2 bg-slate-800 border border-slate-700 rounded px-3 py-2">
+      <div className="min-w-0">
+        <p className="text-sm text-slate-200 truncate">{level.name}</p>
+        {level.hint && <p className="text-xs text-slate-500 truncate">{level.hint}</p>}
+      </div>
+      <div className="flex items-center gap-1 shrink-0">
+        <button type="button" onClick={() => onPlay(level)} className="px-2 py-1 rounded bg-teal-600 text-white text-xs">
+          Play
+        </button>
+        <button type="button" onClick={() => onEdit(level)} className="p-1.5 rounded border border-slate-600 text-slate-300">
+          <Pencil className="w-3.5 h-3.5" />
+        </button>
+        {onDelete && (
+          <button type="button" onClick={() => onDelete(level)} className="p-1.5 rounded border border-slate-600 text-slate-400 hover:text-red-400">
+            <Trash2 className="w-3.5 h-3.5" />
+          </button>
+        )}
       </div>
     </div>
+  );
+}
+
+function MenuScreen({ customLevels, loading, onPlay, onEditBuiltIn, onEditCustom, onNew, onDelete }) {
+  return (
+    <div className="bg-slate-900 p-6 rounded-xl">
+      <div className="max-w-md mx-auto mb-4">
+        <h2 className="text-slate-100 text-lg font-semibold">Puzzle lab</h2>
+        <p className="text-slate-400 text-sm mt-1">Dev menu — review, play, and build levels.</p>
+      </div>
+
+      <div className="max-w-md mx-auto space-y-2">
+        <p className="text-xs text-slate-500 uppercase tracking-wide">Built-in</p>
+        {BUILT_IN_LEVELS.map((lvl) => (
+          <LevelRow key={lvl.id} level={lvl} onPlay={onPlay} onEdit={onEditBuiltIn} />
+        ))}
+      </div>
+
+      <div className="max-w-md mx-auto space-y-2 mt-5">
+        <p className="text-xs text-slate-500 uppercase tracking-wide">Custom</p>
+        {loading && <p className="text-xs text-slate-600">Loading\u2026</p>}
+        {!loading && customLevels.length === 0 && <p className="text-xs text-slate-600">No custom levels yet.</p>}
+        {customLevels.map((lvl) => (
+          <LevelRow key={lvl.id} level={lvl} onPlay={onPlay} onEdit={onEditCustom} onDelete={onDelete} />
+        ))}
+      </div>
+
+      <button type="button" onClick={onNew} className="max-w-md mx-auto mt-5 w-full flex items-center justify-center gap-1 py-2 rounded border border-dashed border-slate-600 text-slate-300 text-sm">
+        <Plus className="w-4 h-4" /> New level
+      </button>
+    </div>
+  );
+}
+
+export default function PuzzleLab() {
+  const [screen, setScreen] = useState("menu");
+  const [customLevels, setCustomLevels] = useState([]);
+  const [loadingLevels, setLoadingLevels] = useState(true);
+  const [activeLevel, setActiveLevel] = useState(null);
+  const [editorInitial, setEditorInitial] = useState(null);
+
+  useEffect(() => {
+    let mounted = true;
+    loadCustomLevels().then((levels) => {
+      if (mounted) {
+        setCustomLevels(levels);
+        setLoadingLevels(false);
+      }
+    });
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  function playLevel(level) {
+    setActiveLevel(level);
+    setScreen("play");
+  }
+  function editBuiltIn(level) {
+    setEditorInitial({ ...clone(level), id: null, name: level.name + " copy" });
+    setScreen("edit");
+  }
+  function editCustom(level) {
+    setEditorInitial(clone(level));
+    setScreen("edit");
+  }
+  function newLevel() {
+    setEditorInitial(blankLevel());
+    setScreen("edit");
+  }
+  async function handleDelete(level) {
+    await deleteCustomLevel(level.id);
+    setCustomLevels((prev) => prev.filter((l) => l.id !== level.id));
+  }
+  function handleSaved(level) {
+    setCustomLevels((prev) => {
+      const exists = prev.some((l) => l.id === level.id);
+      return exists ? prev.map((l) => (l.id === level.id ? level : l)) : [...prev, level];
+    });
+  }
+  function handleTest(draft) {
+    setActiveLevel(draft);
+    setScreen("play");
+  }
+
+  if (screen === "play" && activeLevel) {
+    return <PlayScreen level={activeLevel} onBack={() => setScreen("menu")} />;
+  }
+  if (screen === "edit" && editorInitial) {
+    return (
+      <EditorScreen
+        initialLevel={editorInitial}
+        onBack={() => setScreen("menu")}
+        onSaved={(lvl) => {
+          handleSaved(lvl);
+          setScreen("menu");
+        }}
+        onTest={handleTest}
+      />
+    );
+  }
+  return (
+    <MenuScreen
+      customLevels={customLevels}
+      loading={loadingLevels}
+      onPlay={playLevel}
+      onEditBuiltIn={editBuiltIn}
+      onEditCustom={editCustom}
+      onNew={newLevel}
+      onDelete={handleDelete}
+    />
   );
 }
