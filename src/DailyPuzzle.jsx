@@ -757,15 +757,14 @@ function EnemyFacing({ dir }) {
         position: "absolute",
         top: "50%",
         left: "50%",
-        width: 27,
-        height: 27,
-        transform: `translate(-50%, -50%) rotate(${upBasedAngle(dir)}deg) translateY(-18px)`,
-        filter: "drop-shadow(0 1px 2px rgba(0,0,0,0.7))",
+        width: 15,
+        height: 15,
+        transform: `translate(-50%, -50%) rotate(${upBasedAngle(dir)}deg) translateY(-13px)`,
+        filter: "drop-shadow(0 1px 1.5px rgba(0,0,0,0.75))",
         pointerEvents: "none",
       }}
     >
-      <line x1="12" y1="21" x2="12" y2="13.5" stroke="#ef4444" strokeWidth="3" strokeLinecap="round" />
-      <path d="M12 1 L20.5 14 L3.5 14 Z" fill="#ef4444" stroke="#ffffff" strokeWidth="1.4" strokeLinejoin="round" />
+      <path d="M12 2 L19.5 16 L12 12 L4.5 16 Z" fill="#ef4444" stroke="#ffffff" strokeWidth="1" strokeLinejoin="round" />
     </svg>
   );
 }
@@ -892,6 +891,31 @@ function RulesModal({ onClose }) {
           }
         >
           Bold red = gets hit right now. Pale red = gets hit after this turn's pushes/pulls/conveyors.
+        </RuleRow>
+
+        <RuleRow
+          title="Enemy collisions"
+          swatch={
+            <div style={{ position: "relative", width: 30, height: 22 }}>
+              <div className="rounded-full bg-red-500" style={{ position: "absolute", left: 0, top: 3, width: 15, height: 15 }} />
+              <div className="rounded-full bg-red-500" style={{ position: "absolute", right: 0, top: 3, width: 15, height: 15 }} />
+              <div
+                style={{
+                  position: "absolute",
+                  left: "50%",
+                  top: "50%",
+                  transform: "translate(-50%, -50%)",
+                  width: 10,
+                  height: 10,
+                  borderRadius: "50%",
+                  background: "#fde047",
+                  boxShadow: "0 0 6px 2px rgba(249,115,22,0.85)",
+                }}
+              />
+            </div>
+          }
+        >
+          Push or pull an enemy into another enemy's tile — the impact destroys them both.
         </RuleRow>
 
         <RuleRow
@@ -1697,8 +1721,8 @@ function PlayScreen({ level, onBack }) {
         })}
       </div>
 
-      <div className="mt-4 max-w-md mx-auto">
-        <div data-hand className="flex flex-wrap gap-3 p-3 rounded-lg border-2 border-stone-600 bg-stone-800 min-h-16">
+      <div className="mt-4 w-full max-w-md mx-auto">
+        <div data-hand className="w-full flex flex-wrap gap-3 p-3 rounded-lg border-2 border-stone-600 bg-stone-800 min-h-16">
           {handUnits.map((unit) => (
             <div key={unit.id} className="flex flex-col items-center gap-1">
               <div
