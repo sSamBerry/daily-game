@@ -665,17 +665,28 @@ const BUILT_IN_LEVELS = [
 // API only exists inside Claude's own artifact sandbox. On a real deployed
 // site this uses plain `localStorage` instead — synchronous under the hood,
 // but kept as an async function so the call site (PlayScreen) doesn't change.
+//
+// "Today" here is always the puzzle's own calendar date — amsterdamPuzzleDateStr(),
+// which only rolls over at 9am Europe/Amsterdam — never the plain UTC date.
+// Amsterdam is ahead of UTC, so UTC midnight lands hours before the puzzle
+// actually changes; keying the streak off UTC date let a player replay the
+// still-showing previous puzzle in that gap and bump their streak twice for
+// what the app considers the same puzzle day.
+function shiftDateStr(dateStr, deltaDays) {
+  const d = new Date(dateStr + "T00:00:00Z");
+  d.setUTCDate(d.getUTCDate() + deltaDays);
+  return d.toISOString().slice(0, 10);
+}
+
 async function recordWinAndGetStreak() {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = amsterdamPuzzleDateStr();
   let streak = 1;
   try {
     const raw = localStorage.getItem("puzzlelab_streak");
     if (raw) {
       const data = JSON.parse(raw);
       if (data.lastDate === today) return data.streak;
-      const y = new Date();
-      y.setDate(y.getDate() - 1);
-      const yesterday = y.toISOString().slice(0, 10);
+      const yesterday = shiftDateStr(today, -1);
       streak = data.lastDate === yesterday ? data.streak + 1 : 1;
     }
   } catch (e) {
@@ -697,11 +708,9 @@ function getCurrentStreak() {
     const raw = localStorage.getItem("puzzlelab_streak");
     if (!raw) return 0;
     const data = JSON.parse(raw);
-    const today = new Date().toISOString().slice(0, 10);
+    const today = amsterdamPuzzleDateStr();
     if (data.lastDate === today) return data.streak;
-    const y = new Date();
-    y.setDate(y.getDate() - 1);
-    const yesterday = y.toISOString().slice(0, 10);
+    const yesterday = shiftDateStr(today, -1);
     if (data.lastDate === yesterday) return data.streak;
     return 0;
   } catch (e) {
@@ -714,8 +723,7 @@ function hasWonToday() {
     const raw = localStorage.getItem("puzzlelab_streak");
     if (!raw) return false;
     const data = JSON.parse(raw);
-    const today = new Date().toISOString().slice(0, 10);
-    return data.lastDate === today;
+    return data.lastDate === amsterdamPuzzleDateStr();
   } catch (e) {
     return false;
   }
@@ -1980,10 +1988,16 @@ function dayIndexSince(launchDateStr) {
 
 function pickDailyLevel(levels, launchDateStr) {
   const dayIndex = dayIndexSince(launchDateStr);
-  // Cycles through your level list. Add more levels over time so it
-  // doesn't visibly repeat — see the README for how to extend this.
+  const dayNumber = dayIndex + 1;
+  // A level authored with a `date` (set in the Puzzle Lab editor) always wins
+  // for that calendar date, so purpose-built levels can be scheduled ahead —
+  // see the README for the editor -> BUILT_IN_LEVELS workflow.
+  const dated = levels.find((l) => l.date === amsterdamPuzzleDateStr());
+  if (dated) return { level: dated, dayNumber };
+  // No dated level for today — fall back to cycling through the undated
+  // list. Add more levels over time so it doesn't visibly repeat.
   const level = levels[dayIndex % levels.length];
-  return { level, dayNumber: dayIndex + 1 };
+  return { level, dayNumber };
 }
 
 export default function DailyPuzzleApp() {

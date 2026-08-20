@@ -636,7 +636,7 @@ const BUILT_IN_LEVELS = [
 ];
 
 function blankLevel() {
-  return { id: null, name: "New level", hint: "", units: [], enemies: [], buildings: [], walls: [], conveyors: [] };
+  return { id: null, name: "New level", hint: "", date: "", units: [], enemies: [], buildings: [], walls: [], conveyors: [] };
 }
 
 async function loadCustomLevels() {
@@ -1662,9 +1662,20 @@ function EditorScreen({ initialLevel, onBack, onSaved, onTest }) {
       <input
         value={draft.hint}
         onChange={(e) => setDraft((prev) => ({ ...prev, hint: e.target.value }))}
-        className="w-full max-w-md mx-auto block bg-slate-800 border-2 border-slate-700 rounded-md px-3 py-2 text-sm text-slate-200 font-bold mb-4"
+        className="w-full max-w-md mx-auto block bg-slate-800 border-2 border-slate-700 rounded-md px-3 py-2 text-sm text-slate-200 font-bold mb-2"
         placeholder="One-line hint shown to the player"
       />
+
+      <div className="w-full max-w-md mx-auto mb-4 flex items-center gap-2">
+        <label className="text-xs text-slate-500 font-bold shrink-0">Scheduled date</label>
+        <input
+          type="date"
+          value={draft.date || ""}
+          onChange={(e) => setDraft((prev) => ({ ...prev, date: e.target.value }))}
+          className="bg-slate-800 border-2 border-slate-700 rounded-md px-3 py-2 text-sm text-slate-200 font-bold"
+        />
+        <span className="text-xs text-slate-600">Which day this puzzle should appear on — optional.</span>
+      </div>
 
       <div className="max-w-md mx-auto mb-2 flex items-center gap-2 flex-wrap">
         <button type="button" onClick={() => setTool("eraser")} className={`${toolSwatchClass} ${tool === "eraser" ? "border-teal-400" : "border-slate-700"} bg-slate-800`}>
@@ -1799,7 +1810,10 @@ function LevelRow({ level, onPlay, onEdit, onDelete }) {
   return (
     <div className="flex items-center justify-between gap-2 bg-slate-800 border border-slate-700 rounded px-3 py-2">
       <div className="min-w-0">
-        <p className="text-sm text-slate-200 truncate">{level.name}</p>
+        <p className="text-sm text-slate-200 truncate">
+          {level.name}
+          {level.date && <span className="ml-2 text-xs text-teal-400 font-bold">{level.date}</span>}
+        </p>
         {level.hint && <p className="text-xs text-slate-500 truncate">{level.hint}</p>}
       </div>
       <div className="flex items-center gap-1 shrink-0">
@@ -1819,7 +1833,7 @@ function LevelRow({ level, onPlay, onEdit, onDelete }) {
   );
 }
 
-function MenuScreen({ customLevels, loading, onPlay, onEditBuiltIn, onEditCustom, onNew, onDelete }) {
+function MenuScreen({ customLevels, loading, onPlay, onEditBuiltIn, onEditCustom, onNew, onDelete, onClearAll }) {
   return (
     <div className="bg-slate-900 p-6 rounded-xl">
       <div className="max-w-md mx-auto mb-4">
@@ -1834,13 +1848,22 @@ function MenuScreen({ customLevels, loading, onPlay, onEditBuiltIn, onEditCustom
         ))}
       </div>
 
-      <div className="max-w-md mx-auto space-y-2 mt-5">
-        <p className="text-xs text-slate-500 uppercase tracking-wide">Custom</p>
-        {loading && <p className="text-xs text-slate-600">Loading\u2026</p>}
-        {!loading && customLevels.length === 0 && <p className="text-xs text-slate-600">No custom levels yet.</p>}
-        {customLevels.map((lvl) => (
-          <LevelRow key={lvl.id} level={lvl} onPlay={onPlay} onEdit={onEditCustom} onDelete={onDelete} />
-        ))}
+      <div className="max-w-md mx-auto mt-5">
+        <div className="flex items-center justify-between">
+          <p className="text-xs text-slate-500 uppercase tracking-wide">Custom</p>
+          {customLevels.length > 0 && (
+            <button type="button" onClick={onClearAll} className="flex items-center gap-1 text-xs text-slate-500 hover:text-red-400">
+              <Trash2 className="w-3 h-3" /> Clear all
+            </button>
+          )}
+        </div>
+        <div className="space-y-2 mt-2">
+          {loading && <p className="text-xs text-slate-600">Loading\u2026</p>}
+          {!loading && customLevels.length === 0 && <p className="text-xs text-slate-600">No custom levels yet.</p>}
+          {customLevels.map((lvl) => (
+            <LevelRow key={lvl.id} level={lvl} onPlay={onPlay} onEdit={onEditCustom} onDelete={onDelete} />
+          ))}
+        </div>
       </div>
 
       <button type="button" onClick={onNew} className="max-w-md mx-auto mt-5 w-full flex items-center justify-center gap-1 py-2 rounded border border-dashed border-slate-600 text-slate-300 text-sm">
@@ -1856,6 +1879,10 @@ export default function PuzzleLab() {
   const [loadingLevels, setLoadingLevels] = useState(true);
   const [activeLevel, setActiveLevel] = useState(null);
   const [editorInitial, setEditorInitial] = useState(null);
+  // Where "Menu" from the play screen should return to — the main menu when
+  // playing a saved/built-in level, or back into the editor (with the tested
+  // draft preserved) when playing arrived via "Test play".
+  const [playOrigin, setPlayOrigin] = useState("menu");
 
   useEffect(() => {
     let mounted = true;
@@ -1872,6 +1899,7 @@ export default function PuzzleLab() {
 
   function playLevel(level) {
     setActiveLevel(level);
+    setPlayOrigin("menu");
     setScreen("play");
   }
   function editBuiltIn(level) {
@@ -1890,6 +1918,11 @@ export default function PuzzleLab() {
     await deleteCustomLevel(level.id);
     setCustomLevels((prev) => prev.filter((l) => l.id !== level.id));
   }
+  async function handleClearAll() {
+    if (!window.confirm(`Delete all ${customLevels.length} custom level(s)? This can't be undone.`)) return;
+    await Promise.all(customLevels.map((l) => deleteCustomLevel(l.id)));
+    setCustomLevels([]);
+  }
   function handleSaved(level) {
     setCustomLevels((prev) => {
       const exists = prev.some((l) => l.id === level.id);
@@ -1897,12 +1930,17 @@ export default function PuzzleLab() {
     });
   }
   function handleTest(draft) {
+    // Keep the in-progress draft as what the editor reopens with, so hitting
+    // "Menu" from the test-play screen lands back in the editor instead of
+    // the main menu, with edits intact.
+    setEditorInitial(draft);
     setActiveLevel(draft);
+    setPlayOrigin("edit");
     setScreen("play");
   }
 
   if (screen === "play" && activeLevel) {
-    return <PlayScreen level={activeLevel} onBack={() => setScreen("menu")} />;
+    return <PlayScreen level={activeLevel} onBack={() => setScreen(playOrigin)} />;
   }
   if (screen === "edit" && editorInitial) {
     return (
@@ -1926,6 +1964,7 @@ export default function PuzzleLab() {
       onEditCustom={editCustom}
       onNew={newLevel}
       onDelete={handleDelete}
+      onClearAll={handleClearAll}
     />
   );
 }
