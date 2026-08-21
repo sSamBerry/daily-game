@@ -810,19 +810,30 @@ function shiftDateStr(dateStr, deltaDays) {
   return d.toISOString().slice(0, 10);
 }
 
+// One-time goodwill bump for moving the game to dailygiu.com: everyone's
+// streak lived in localStorage on the old URL, so it reads as 0 here even
+// for people who'd been playing daily. For the 2026-08-22 puzzle only,
+// anyone who'd otherwise show/start from 0 gets a starting streak of 3
+// instead (4 once they win that day) — a real streak already in progress
+// on the new domain (e.g. someone who played on launch day, 2026-08-21) is
+// left alone and just continues normally.
+const MIGRATION_BONUS_DATE = "2026-08-22";
+const MIGRATION_BONUS_STREAK = 3;
+
 async function recordWinAndGetStreak() {
   const today = amsterdamPuzzleDateStr();
-  let streak = 1;
+  let streak = today === MIGRATION_BONUS_DATE ? MIGRATION_BONUS_STREAK + 1 : 1;
   try {
     const raw = localStorage.getItem("puzzlelab_streak");
     if (raw) {
       const data = JSON.parse(raw);
       if (data.lastDate === today) return data.streak;
       const yesterday = shiftDateStr(today, -1);
-      streak = data.lastDate === yesterday ? data.streak + 1 : 1;
+      streak = data.lastDate === yesterday ? data.streak + 1 : streak;
     }
   } catch (e) {
-    // no streak recorded yet, or localStorage unavailable — start at 1
+    // no streak recorded yet, or localStorage unavailable — start at the
+    // default computed above
   }
   try {
     localStorage.setItem("puzzlelab_streak", JSON.stringify({ lastDate: today, streak }));
@@ -836,17 +847,18 @@ async function recordWinAndGetStreak() {
 // recordWinAndGetStreak's own logic for whether a streak is still alive
 // (won today or yesterday) without writing anything or requiring a win.
 function getCurrentStreak() {
+  const today = amsterdamPuzzleDateStr();
+  const fallback = today === MIGRATION_BONUS_DATE ? MIGRATION_BONUS_STREAK : 0;
   try {
     const raw = localStorage.getItem("puzzlelab_streak");
-    if (!raw) return 0;
+    if (!raw) return fallback;
     const data = JSON.parse(raw);
-    const today = amsterdamPuzzleDateStr();
     if (data.lastDate === today) return data.streak;
     const yesterday = shiftDateStr(today, -1);
     if (data.lastDate === yesterday) return data.streak;
-    return 0;
+    return fallback;
   } catch (e) {
-    return 0;
+    return fallback;
   }
 }
 
