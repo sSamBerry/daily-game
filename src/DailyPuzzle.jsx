@@ -413,6 +413,7 @@ const BUILT_IN_LEVELS = [
     id: "standoff",
     name: "Standoff",
     hint: "A wall closes off the obvious pull approach here. Go around.",
+    date: "2026-08-19",
     units: [
       { id: "puller", name: "Puller", ability: "pull" },
       { id: "pusher", name: "Pusher", ability: "push" },
@@ -436,6 +437,7 @@ const BUILT_IN_LEVELS = [
     id: "annelo",
     name: "Annelo",
     hint: "",
+    date: "2026-08-20",
     units: [
       { id: "u-mt0m8dww-0tc4v", name: "Pusher", ability: "push" },
       { id: "u-mt0m8e9w-g2wjy", name: "Pusher 2", ability: "push" },
@@ -510,213 +512,6 @@ const BUILT_IN_LEVELS = [
       { id: "b2", name: "Structure B", x: 6, y: 3 },
     ],
     walls: [],
-    conveyors: [],
-  },
-  {
-    id: "crossfire",
-    name: "Crossfire",
-    hint: "Push one enemy so its own attack redirects into another.",
-    units: [{ id: "pusher", name: "Pusher", ability: "push" }],
-    enemies: [
-      { id: "ea", name: "Enemy A", x: 1, y: 3, dir: { dx: 1, dy: 0 }, range: 3 },
-      { id: "eb", name: "Enemy B", x: 3, y: 2, dir: { dx: 0, dy: 1 }, range: 2 },
-    ],
-    buildings: [
-      { id: "b1", name: "Structure A", x: 4, y: 3 },
-      { id: "b2", name: "Structure B", x: 3, y: 4 },
-    ],
-    walls: [],
-    conveyors: [],
-  },
-  {
-    id: "full-toolkit",
-    name: "Full toolkit",
-    hint: "Four threats, three units — push, pull, and block, each exactly once.",
-    units: [
-      { id: "pusher", name: "Pusher", ability: "push" },
-      { id: "puller", name: "Puller", ability: "pull" },
-      { id: "blocker", name: "Blocker", ability: "block" },
-    ],
-    enemies: [
-      { id: "ea", name: "Enemy A", x: 2, y: 0, dir: { dx: -1, dy: 0 }, range: 2 },
-      { id: "eb", name: "Enemy B", x: 6, y: 0, dir: { dx: 0, dy: 1 }, range: 2 },
-      { id: "ec", name: "Enemy C", x: 4, y: 6, dir: { dx: 0, dy: -1 }, range: 8 },
-      { id: "ed", name: "Enemy D", x: 2, y: 6, dir: { dx: 0, dy: -1 }, range: 2 },
-    ],
-    buildings: [
-      { id: "b1", name: "Structure A", x: 0, y: 0 },
-      { id: "b2", name: "Structure B", x: 6, y: 2 },
-      { id: "b3", name: "Structure C", x: 4, y: 1 },
-      { id: "b4", name: "Structure D", x: 2, y: 4 },
-    ],
-    walls: [],
-    conveyors: [],
-  },
-  {
-    id: "detour",
-    name: "Detour",
-    hint: "Every push direction saves the structure. Only some save your Pusher too.",
-    units: [{ id: "pusher", name: "Pusher", ability: "push" }],
-    enemies: [{ id: "ea", name: "Enemy A", x: 2, y: 3, dir: { dx: 1, dy: 0 }, range: 3 }],
-    buildings: [{ id: "b1", name: "Structure A", x: 5, y: 3 }],
-    walls: [{ x: 1, y: 3 }],
-    conveyors: [],
-  },
-  {
-    id: "relay",
-    name: "Relay",
-    hint: "Puller acts before Pusher here. Set one enemy in place, then finish it.",
-    units: [
-      { id: "puller", name: "Puller", ability: "pull" },
-      { id: "pusher", name: "Pusher", ability: "push" },
-    ],
-    enemies: [
-      { id: "ec", name: "Enemy C", x: 4, y: 7, dir: { dx: -1, dy: 0 }, range: 3 },
-      { id: "ed", name: "Enemy D", x: 5, y: 4, dir: { dx: 1, dy: 0 }, range: 2 },
-    ],
-    buildings: [
-      { id: "b1", name: "Structure C", x: 1, y: 7 },
-      { id: "b2", name: "Structure D", x: 7, y: 4 },
-    ],
-    walls: [],
-    conveyors: [],
-  },
-  {
-    id: "gauntlet",
-    name: "Gauntlet",
-    hint: "There's exactly one way to push this one. Everything else is blocked or occupied.",
-    units: [
-      { id: "pusher", name: "Pusher", ability: "push" },
-      { id: "blocker", name: "Blocker", ability: "block" },
-    ],
-    enemies: [
-      { id: "ea", name: "Enemy A", x: 3, y: 2, dir: { dx: -1, dy: 0 }, range: 2 },
-      { id: "eb", name: "Enemy B", x: 4, y: 2, dir: { dx: 1, dy: 0 }, range: 3 },
-      { id: "ec", name: "Enemy C", x: 4, y: 0, dir: { dx: 0, dy: 1 }, range: 7 },
-    ],
-    buildings: [
-      { id: "b1", name: "Structure A", x: 1, y: 2 },
-      { id: "b2", name: "Structure B", x: 7, y: 2 },
-      { id: "b3", name: "Structure C", x: 4, y: 7 },
-    ],
-    walls: [{ x: 3, y: 1 }],
-    conveyors: [],
-  },
-  {
-    id: "crucible",
-    name: "Crucible",
-    hint: "Two collisions, one block, two walls closing off the easy paths.",
-    units: [
-      { id: "puller", name: "Puller", ability: "pull" },
-      { id: "pusher", name: "Pusher", ability: "push" },
-      { id: "blocker", name: "Blocker", ability: "block" },
-    ],
-    enemies: [
-      { id: "ea", name: "Enemy A", x: 2, y: 1, dir: { dx: -1, dy: 0 }, range: 2 },
-      { id: "eb", name: "Enemy B", x: 5, y: 1, dir: { dx: 1, dy: 0 }, range: 2 },
-      { id: "ec", name: "Enemy C", x: 3, y: 6, dir: { dx: -1, dy: 0 }, range: 2 },
-      { id: "ed", name: "Enemy D", x: 4, y: 6, dir: { dx: 1, dy: 0 }, range: 3 },
-      { id: "ee", name: "Enemy E", x: 4, y: 5, dir: { dx: 0, dy: -1 }, range: 3 },
-    ],
-    buildings: [
-      { id: "b1", name: "Structure A", x: 0, y: 1 },
-      { id: "b2", name: "Structure B", x: 7, y: 1 },
-      { id: "b3", name: "Structure C", x: 1, y: 6 },
-      { id: "b4", name: "Structure D", x: 7, y: 6 },
-      { id: "b5", name: "Structure E", x: 4, y: 2 },
-    ],
-    walls: [{ x: 1, y: 1 }, { x: 3, y: 5 }],
-    conveyors: [],
-  },
-  {
-    id: "redirect",
-    name: "Redirect",
-    hint: "Turn one enemy to face the other before either can fire.",
-    units: [{ id: "rotator", name: "Rotator", ability: "rotate" }],
-    enemies: [
-      { id: "ea", name: "Enemy A", x: 2, y: 3, dir: { dx: -1, dy: 0 }, range: 2 },
-      { id: "eb", name: "Enemy B", x: 2, y: 2, dir: { dx: 1, dy: 0 }, range: 3 },
-    ],
-    buildings: [
-      { id: "b1", name: "Structure A", x: 0, y: 3 },
-      { id: "b2", name: "Structure B", x: 5, y: 2 },
-    ],
-    walls: [],
-    conveyors: [],
-  },
-  {
-    id: "double-take",
-    name: "Double take",
-    hint: "Two independent pairs. Two Pushers, one each.",
-    units: [
-      { id: "pusher1", name: "Pusher 1", ability: "push" },
-      { id: "pusher2", name: "Pusher 2", ability: "push" },
-    ],
-    enemies: [
-      { id: "ea", name: "Enemy A", x: 2, y: 2, dir: { dx: -1, dy: 0 }, range: 2 },
-      { id: "eb", name: "Enemy B", x: 3, y: 2, dir: { dx: 1, dy: 0 }, range: 3 },
-      { id: "ec", name: "Enemy C", x: 2, y: 5, dir: { dx: -1, dy: 0 }, range: 2 },
-      { id: "ed", name: "Enemy D", x: 3, y: 5, dir: { dx: 1, dy: 0 }, range: 3 },
-    ],
-    buildings: [
-      { id: "b1", name: "Structure A", x: 0, y: 2 },
-      { id: "b2", name: "Structure B", x: 6, y: 2 },
-      { id: "b3", name: "Structure C", x: 0, y: 5 },
-      { id: "b4", name: "Structure D", x: 6, y: 5 },
-    ],
-    walls: [],
-    conveyors: [],
-  },
-  {
-    id: "crossed-wires",
-    name: "Crossed wires",
-    hint: "Two redirects and a block. Turn each enemy to face the other before it can fire.",
-    units: [
-      { id: "rotcw", name: "Rotator", ability: "rotate" },
-      { id: "rotccw", name: "Rotator", ability: "rotate_ccw" },
-      { id: "blocker", name: "Blocker", ability: "block" },
-    ],
-    enemies: [
-      { id: "ea1", name: "Enemy A", x: 2, y: 1, dir: { dx: -1, dy: 0 }, range: 2 },
-      { id: "eb1", name: "Enemy B", x: 2, y: 0, dir: { dx: 1, dy: 0 }, range: 3 },
-      { id: "ed", name: "Enemy D", x: 2, y: 5, dir: { dx: 1, dy: 0 }, range: 3 },
-      { id: "ec", name: "Enemy C", x: 2, y: 4, dir: { dx: -1, dy: 0 }, range: 2 },
-      { id: "ee", name: "Enemy E", x: 6, y: 7, dir: { dx: 0, dy: -1 }, range: 7 },
-    ],
-    buildings: [
-      { id: "b1", name: "Structure A", x: 0, y: 1 },
-      { id: "b2", name: "Structure B", x: 5, y: 0 },
-      { id: "b3", name: "Structure C", x: 0, y: 4 },
-      { id: "b4", name: "Structure D", x: 5, y: 5 },
-      { id: "b5", name: "Structure E", x: 6, y: 0 },
-    ],
-    walls: [],
-    conveyors: [],
-  },
-  {
-    id: "vise",
-    name: "Vise",
-    hint: "A wall closes the direct pull approach. A counter-rotation handles the rest.",
-    units: [
-      { id: "puller", name: "Puller", ability: "pull" },
-      { id: "rotccw", name: "Rotator", ability: "rotate_ccw" },
-      { id: "blocker", name: "Blocker", ability: "block" },
-    ],
-    enemies: [
-      { id: "ef", name: "Enemy F", x: 2, y: 1, dir: { dx: -1, dy: 0 }, range: 2 },
-      { id: "eg", name: "Enemy G", x: 5, y: 1, dir: { dx: 1, dy: 0 }, range: 2 },
-      { id: "eh", name: "Enemy H", x: 4, y: 5, dir: { dx: 0, dy: 1 }, range: 2 },
-      { id: "ei", name: "Enemy I", x: 5, y: 5, dir: { dx: 0, dy: -1 }, range: 3 },
-      { id: "ej", name: "Enemy J", x: 3, y: 7, dir: { dx: 0, dy: -1 }, range: 7 },
-    ],
-    buildings: [
-      { id: "b1", name: "Structure F", x: 0, y: 1 },
-      { id: "b2", name: "Structure G", x: 7, y: 1 },
-      { id: "b3", name: "Structure H", x: 4, y: 7 },
-      { id: "b4", name: "Structure I", x: 5, y: 2 },
-      { id: "b5", name: "Structure J", x: 3, y: 0 },
-    ],
-    walls: [{ x: 1, y: 1 }],
     conveyors: [],
   },
   {
@@ -2735,7 +2530,11 @@ function ConfigApp() {
   const [editorInitial, setEditorInitial] = useState(null);
   const [activeLevel, setActiveLevel] = useState(null);
 
-  const outerStyle = { minHeight: "100dvh", overflowY: "auto", background: "#1c1917", padding: "24px 16px" };
+  // #root is pinned to a fixed height with overflow:hidden (so the drag-driven
+  // game itself never scrolls the page) — this screen needs its own explicit
+  // height + overflow:auto to actually become a scroll container inside that,
+  // since a `minHeight` alone would just get clipped by the ancestor instead.
+  const outerStyle = { height: "100dvh", overflowY: "auto", background: "#1c1917", padding: "24px 16px", boxSizing: "border-box" };
 
   if (!unlocked) return <ConfigGate onUnlock={() => setUnlocked(true)} />;
 
