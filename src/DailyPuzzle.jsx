@@ -2579,9 +2579,204 @@ function ConfigApp() {
   );
 }
 
+// ---------------------------------------------------------------------------
+// Future ecosystem hub, reachable only at /home (not linked from anywhere
+// yet — dailygiu.com itself stays this one game for now). Pixel-matches the
+// "Daily Games Home" design handoff: a retro-window header plus a card per
+// game. Confluence and Queens 2 are placeholders from that handoff, not real
+// games — their taps are stubs until those games actually exist.
+// ---------------------------------------------------------------------------
+function injectGoogleFont(href) {
+  if (document.querySelector(`link[data-font-href="${href}"]`)) return;
+  const link = document.createElement("link");
+  link.rel = "stylesheet";
+  link.href = href;
+  link.dataset.fontHref = href;
+  document.head.appendChild(link);
+}
+
+function GameCard({ gameNo, chromeColor, squareColors, iconBg, iconRadius, iconInner, name, tagline, streak, streakBg, onPlay }) {
+  const [hover, setHover] = useState(false);
+  return (
+    <button
+      type="button"
+      onClick={onPlay}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      style={{
+        all: "unset",
+        cursor: "pointer",
+        display: "block",
+        width: "100%",
+        boxSizing: "border-box",
+        fontFamily: "'Baloo 2', system-ui, sans-serif",
+        transform: hover ? "translate(-2px, -2px)" : "none",
+        transition: "transform 0.1s ease",
+      }}
+    >
+      <div style={{ background: "#ffffff", border: "3px solid #4b2e73", borderRadius: 16, boxShadow: "6px 6px 0 #4b2e73", overflow: "hidden" }}>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            background: chromeColor,
+            borderBottom: "3px solid #4b2e73",
+            padding: "6px 10px",
+          }}
+        >
+          <div style={{ fontSize: 12, fontWeight: 700, color: "#4b2e73", letterSpacing: ".1em", textTransform: "uppercase", fontFamily: "'DM Mono', monospace" }}>
+            game {gameNo}
+          </div>
+          <div style={{ display: "flex", gap: 5 }}>
+            {squareColors.map((c, i) => (
+              <div key={i} style={{ width: 11, height: 11, border: "2.5px solid #4b2e73", borderRadius: "50%", background: c }} />
+            ))}
+          </div>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 14, padding: "18px 16px" }}>
+          <div
+            style={{
+              width: 52,
+              height: 52,
+              flex: "none",
+              border: "3px solid #4b2e73",
+              borderRadius: iconRadius,
+              background: iconBg,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              boxShadow: "3px 3px 0 #4b2e73",
+            }}
+          >
+            {iconInner}
+          </div>
+          <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 2, textAlign: "left" }}>
+            <div style={{ fontSize: 27, fontWeight: 800, color: "#4b2e73", lineHeight: 1.05 }}>{name}</div>
+            <div style={{ fontSize: 13, fontFamily: "'DM Mono', monospace", color: "#a07fc4" }}>{tagline}</div>
+          </div>
+          <div
+            style={{
+              flex: "none",
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              gap: 3,
+              background: streakBg,
+              border: "3px solid #4b2e73",
+              borderRadius: 12,
+              padding: "7px 9px",
+              boxShadow: "3px 3px 0 #4b2e73",
+            }}
+          >
+            <div style={{ fontSize: 20, fontWeight: 800, color: "#4b2e73", lineHeight: 1 }}>{streak}</div>
+            <div style={{ fontSize: 9, fontFamily: "'DM Mono', monospace", color: "#4b2e73", letterSpacing: ".12em" }}>DAYS</div>
+          </div>
+        </div>
+      </div>
+    </button>
+  );
+}
+
+function DailyGamesHome() {
+  useEffect(() => {
+    injectGoogleFont("https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700;800&family=DM+Mono:wght@400;500&display=swap");
+  }, []);
+
+  // Same puzzle-day convention as the rest of the site (9am Amsterdam
+  // rollover), formatted the way the design calls for: "friday, aug 21".
+  const dateLine = new Date(amsterdamPuzzleDateStr() + "T12:00:00Z")
+    .toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric", timeZone: "UTC" })
+    .toLowerCase();
+  // Defender is the real, already-live game — its card shows the player's
+  // actual streak (same source as the in-game header badge), not a mock.
+  const defenderStreak = getCurrentStreak();
+
+  return (
+    <div
+      style={{
+        height: "100dvh",
+        overflowY: "auto",
+        width: "100%",
+        backgroundColor: "#ffe9f3",
+        backgroundImage: "linear-gradient(#ffffff 2px, transparent 2px), linear-gradient(90deg, #ffffff 2px, transparent 2px)",
+        backgroundSize: "36px 36px",
+        display: "flex",
+        justifyContent: "center",
+        fontFamily: "'Baloo 2', system-ui, sans-serif",
+        boxSizing: "border-box",
+        padding: "28px 18px 22px",
+      }}
+    >
+      <div style={{ width: "100%", maxWidth: 430, display: "flex", flexDirection: "column", gap: 26 }}>
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 14, paddingTop: 14 }}>
+          <div style={{ position: "relative", background: "#ffffff", border: "3px solid #4b2e73", borderRadius: 14, boxShadow: "5px 5px 0 #4b2e73", overflow: "hidden", width: "100%" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: "#8ad7d2", borderBottom: "3px solid #4b2e73", padding: "7px 10px" }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: "#4b2e73", letterSpacing: ".08em", textTransform: "uppercase", fontFamily: "'DM Mono', monospace" }}>
+                daily.exe
+              </div>
+              <div style={{ display: "flex", gap: 6 }}>
+                <div style={{ width: 13, height: 13, border: "2.5px solid #4b2e73", borderRadius: "50%", background: "#ffffff" }} />
+                <div style={{ width: 13, height: 13, border: "2.5px solid #4b2e73", borderRadius: "50%", background: "#ffffff" }} />
+                <div style={{ width: 13, height: 13, border: "2.5px solid #4b2e73", borderRadius: "50%", background: "#ffb3d0" }} />
+              </div>
+            </div>
+            <div style={{ padding: "22px 18px 20px", display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
+              <div style={{ fontSize: 38, fontWeight: 800, color: "#4b2e73", lineHeight: 1, letterSpacing: "-.01em" }}>daily games</div>
+              <div style={{ fontSize: 13, fontFamily: "'DM Mono', monospace", color: "#a07fc4", letterSpacing: ".06em" }}>{dateLine}</div>
+            </div>
+          </div>
+        </div>
+
+        <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+          <GameCard
+            gameNo="01"
+            chromeColor="#ffb3d0"
+            squareColors={["#fff5b8", "#8ad7d2"]}
+            iconBg="#8ad7d2"
+            iconRadius="50%"
+            iconInner={<div style={{ width: 22, height: 22, border: "3px solid #4b2e73", borderRadius: "50%", background: "#fff5b8" }} />}
+            name="Defender"
+            tagline="protect the buildings"
+            streak={defenderStreak}
+            streakBg="#fff5b8"
+            onPlay={() => {
+              window.location.href = "/";
+            }}
+          />
+          <GameCard
+            gameNo="02"
+            chromeColor="#c9b6f5"
+            squareColors={["#ffb3d0", "#fff5b8"]}
+            iconBg="#ffb3d0"
+            iconRadius={14}
+            iconInner={<div style={{ width: 22, height: 22, border: "3px solid #4b2e73", borderRadius: 3, background: "#ffffff", transform: "rotate(45deg)" }} />}
+            name="Queens 2"
+            tagline="one per row, no touching"
+            streak={4}
+            streakBg="#8ad7d2"
+            onPlay={() => {}}
+          />
+        </div>
+
+        <div style={{ flex: 1 }} />
+
+        <div style={{ display: "flex", justifyContent: "center", padding: "26px 0 6px" }}>
+          <div style={{ fontSize: 9, fontFamily: "'DM Mono', monospace", color: "#e2c7d8", letterSpacing: ".1em", textAlign: "center" }}>
+            created with love · new puzzles every day at midnight
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function DailyPuzzleApp() {
   if (typeof window !== "undefined" && window.location.pathname === "/config") {
     return <ConfigApp />;
+  }
+  if (typeof window !== "undefined" && window.location.pathname === "/home") {
+    return <DailyGamesHome />;
   }
   const { level, dayNumber } = pickDailyLevel(BUILT_IN_LEVELS, LAUNCH_DATE);
   return (
