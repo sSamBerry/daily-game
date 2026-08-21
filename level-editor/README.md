@@ -2,9 +2,9 @@
 
 `puzzle-lab.jsx` is the **full version** of the game: it has the dev menu,
 the level browser, and the drag-to-build level editor with a play-test
-button. This is a *design tool*, not something that gets deployed —
-Netlify never touches this folder; it only builds from the root of the repo
-(`src/DailyPuzzle.jsx`, the trimmed player-only version).
+button. This is a *design tool*, not something that gets deployed — the
+GitHub Pages build never touches this folder; it only builds from the root
+of the repo (`src/DailyPuzzle.jsx`, the trimmed player-only version).
 
 ## How to actually use it
 
@@ -28,8 +28,8 @@ for saving levels-in-progress while you design them.
    of the live rotation. Claude Code can do this step directly for you if
    you're working in this folder locally: just ask it to add the new level
    to `src/DailyPuzzle.jsx`.
-6. Commit and push (via GitHub Desktop or Claude Code) — Netlify picks it
-   up automatically.
+6. Commit and push (via GitHub Desktop or Claude Code) — the GitHub Actions
+   workflow builds and deploys to GitHub Pages (dailygiu.com) automatically.
 
 ## Keeping this file up to date
 
