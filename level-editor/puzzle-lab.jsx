@@ -21,10 +21,14 @@ function uid(prefix) {
 function isWall(state, x, y) {
   return state.walls.some((w) => w.x === x && w.y === y);
 }
+function isWater(state, x, y) {
+  return (state.water || []).some((w) => w.x === x && w.y === y);
+}
 
 function occupiedSet(state, excludeUnitId) {
   const set = new Set();
   state.walls.forEach((w) => set.add(key(w.x, w.y)));
+  (state.water || []).forEach((w) => set.add(key(w.x, w.y)));
   state.units.forEach((u) => {
     if (u.alive && u.onBoard && u.id !== excludeUnitId) set.add(key(u.x, u.y));
   });
@@ -53,7 +57,9 @@ function threatRay(state, enemy) {
   let x = enemy.x;
   let y = enemy.y;
   let hit = null;
-  for (let step = 1; step <= enemy.range; step++) {
+  // Enemies have unlimited range — the ray only ever stops at the board edge
+  // or something in its way, so this just walks tile-by-tile until then.
+  while (true) {
     x += enemy.dir.dx;
     y += enemy.dir.dy;
     if (x < 0 || x >= SIZE || y < 0 || y >= SIZE) break;
@@ -92,6 +98,8 @@ function resolvePull(state, puller) {
     let x = puller.x + dx;
     let y = puller.y + dy;
     let farthest = null;
+    // Water doesn't block line of sight for a pull, same as it doesn't for
+    // gunfire — a puller can spot and grab an enemy on the far side of it.
     while (x >= 0 && x < SIZE && y >= 0 && y < SIZE) {
       if (isWall(state, x, y)) break;
       const b = state.buildings.find((b) => b.alive && b.x === x && b.y === y);
@@ -120,6 +128,11 @@ function resolvePull(state, puller) {
         break;
       }
     }
+    // The enemy flies over water fine, but can't come to rest on it — if the
+    // tile it would land on (right next to the puller) is water, the pull
+    // just doesn't happen in this direction, same as a push with nowhere to
+    // land. Other directions can still work.
+    if (!collideWith && isWater(state, cx, cy)) continue;
     return { dir: [dx, dy], enemy: farthest, landX: cx, landY: cy, collideWith };
   }
   return null;
@@ -173,7 +186,15 @@ function actionPreviewLines(state) {
       if (result) lines.push({ fromX: unit.x, fromY: unit.y, toX: result.enemy.x, toY: result.enemy.y, type: "pull" });
     } else if (unit.ability === "rotate" || unit.ability === "rotate_ccw") {
       const adj = findPushTarget(state, unit);
-      if (adj) lines.push({ fromX: unit.x, fromY: unit.y, toX: adj.e.x, toY: adj.e.y, type: "rotate" });
+      if (adj)
+        lines.push({
+          fromX: unit.x,
+          fromY: unit.y,
+          toX: adj.e.x,
+          toY: adj.e.y,
+          type: "rotate",
+          spin: unit.ability === "rotate" ? "cw" : "ccw",
+        });
     }
   }
   return lines;
@@ -342,8 +363,9 @@ function computeResolution(initial) {
         impacts.push(null);
       }
     } else if (unit.ability === "block") {
-      logs.push(`${unit.name} holds the line.`);
-      impacts.push(null);
+      // Blocking is passive — it just occupies its tile and absorbs shots
+      // whenever they come, so it doesn't take an active "turn" here.
+      continue;
     } else if (unit.ability === "rotate" || unit.ability === "rotate_ccw") {
       const adj = findPushTarget(cur, unit);
       if (adj) {
@@ -353,7 +375,7 @@ function computeResolution(initial) {
             ? { dx: -enemy.dir.dy, dy: enemy.dir.dx }
             : { dx: enemy.dir.dy, dy: -enemy.dir.dx };
         logs.push(`${unit.name} rotates ${enemy.name}.`);
-        impacts.push({ x: enemy.x, y: enemy.y, kind: "rotate" });
+        impacts.push({ x: enemy.x, y: enemy.y, kind: "rotate", spin: unit.ability === "rotate" ? "cw" : "ccw" });
       } else {
         logs.push(`${unit.name} finds nothing to rotate.`);
         impacts.push(null);
@@ -367,10 +389,13 @@ function computeResolution(initial) {
     if (!enemy.alive) continue;
     const { hit } = threatRay(cur, enemy);
     if (!hit) {
-      logs.push(`${enemy.name} finds nothing in range.`);
+      logs.push(`${enemy.name} finds nothing in its path.`);
       impacts.push(null);
     } else if (hit.type === "wall") {
       logs.push(`${enemy.name}'s attack is absorbed by a wall.`);
+      impacts.push(null);
+    } else if (hit.type === "unit" && hit.obj.ability === "block") {
+      logs.push(`${enemy.name}'s attack is absorbed by ${hit.obj.name}.`);
       impacts.push(null);
     } else {
       logs.push(`${enemy.name} destroys ${hit.obj.name}.`);
@@ -587,7 +612,7 @@ const BUILT_IN_LEVELS = [
     hint: "Two redirects and a block. Turn each enemy to face the other before it can fire.",
     units: [
       { id: "rotcw", name: "Rotator", ability: "rotate" },
-      { id: "rotccw", name: "Counter-rotator", ability: "rotate_ccw" },
+      { id: "rotccw", name: "Rotator", ability: "rotate_ccw" },
       { id: "blocker", name: "Blocker", ability: "block" },
     ],
     enemies: [
@@ -613,7 +638,7 @@ const BUILT_IN_LEVELS = [
     hint: "A wall closes the direct pull approach. A counter-rotation handles the rest.",
     units: [
       { id: "puller", name: "Puller", ability: "pull" },
-      { id: "rotccw", name: "Counter-rotator", ability: "rotate_ccw" },
+      { id: "rotccw", name: "Rotator", ability: "rotate_ccw" },
       { id: "blocker", name: "Blocker", ability: "block" },
     ],
     enemies: [
@@ -636,7 +661,7 @@ const BUILT_IN_LEVELS = [
 ];
 
 function blankLevel() {
-  return { id: null, name: "New level", hint: "", date: "", units: [], enemies: [], buildings: [], walls: [], conveyors: [] };
+  return { id: null, name: "New level", hint: "", date: "", units: [], enemies: [], buildings: [], walls: [], water: [], conveyors: [] };
 }
 
 async function loadCustomLevels() {
@@ -700,12 +725,6 @@ async function recordWinAndGetStreak() {
 }
 
 const SLIDE = "left 0.6s ease, top 0.6s ease, opacity 0.4s ease, transform 0.4s ease";
-const DIRS = [
-  { label: "up", dx: 0, dy: -1, glyph: "\u2191" },
-  { label: "right", dx: 1, dy: 0, glyph: "\u2192" },
-  { label: "down", dx: 0, dy: 1, glyph: "\u2193" },
-  { label: "left", dx: -1, dy: 0, glyph: "\u2190" },
-];
 function dirAngle(dir) {
   if (dir.dx === 1) return 0;
   if (dir.dx === -1) return 180;
@@ -762,29 +781,92 @@ function UnitIcon({ unit, size = 26, facingAngle = null, spinAnimation = null, a
   );
 }
 
-function EnemyFacing({ dir }) {
+// An enemy's whole body is shaped like an arrowhead pointing at its facing
+// direction — reads as "aiming that way" at a glance, no separate marker
+// needed. The turn-order number sits in a non-rotated overlay so it always
+// reads upright regardless of which way the arrow is pointing.
+function EnemyToken({ dir, label, active }) {
+  const angle = upBasedAngle(dir);
   return (
-    <div
-      style={{
-        position: "absolute",
-        top: "50%",
-        left: "50%",
-        width: 0,
-        height: 0,
-        borderLeft: "6px solid transparent",
-        borderRight: "6px solid transparent",
-        borderBottom: "11px solid #ffffff",
-        filter: "drop-shadow(0 0 1px rgba(0,0,0,0.9))",
-        transform: `translate(-50%, -50%) rotate(${upBasedAngle(dir)}deg) translateY(-16px)`,
-        pointerEvents: "none",
-      }}
-    />
+    <div style={{ position: "relative", width: "74%", height: "74%" }}>
+      <div
+        className="flex items-center justify-center rounded-md w-full h-full"
+        style={{
+          background: "#dc2626",
+          boxShadow: active ? "0 0 0 3px #fbbf24, 0 0 14px 3px rgba(251,191,36,0.7)" : "none",
+          animation: active ? "enemyFire 0.5s ease-in-out" : "none",
+          transition: "box-shadow 0.25s ease",
+        }}
+      >
+        <span
+          style={{
+            display: "inline-block",
+            fontSize: 30,
+            lineHeight: 1,
+            color: "#ffffff",
+            transform: `rotate(${angle}deg)`,
+            transition: "transform 0.25s ease",
+          }}
+        >
+          ▲
+        </span>
+      </div>
+      {label != null && (
+        <div
+          className="rounded-full flex items-center justify-center"
+          style={{
+            position: "absolute",
+            top: "2%",
+            right: "6%",
+            width: 16,
+            height: 16,
+            background: "#1c1917",
+            border: "1.5px solid #fca5a5",
+            color: "#fca5a5",
+            fontSize: 10,
+            fontWeight: 900,
+            lineHeight: 1,
+          }}
+        >
+          {label}
+        </div>
+      )}
+    </div>
   );
 }
 
-function TerrainMark({ wall, conveyor }) {
+// The turn-order badge for an enemy on the board — positioned relative to
+// the *full tile*, not the 74%-sized arrow body, so it lands in exactly the
+// same corner as a unit's own turn-order badge.
+function EnemyTurnBadge({ label }) {
+  return (
+    <div
+      className="rounded-full flex items-center justify-center"
+      style={{
+        position: "absolute",
+        top: "2%",
+        right: "6%",
+        width: 16,
+        height: 16,
+        background: "#1c1917",
+        border: "1.5px solid #fca5a5",
+        color: "#fca5a5",
+        fontSize: 10,
+        fontWeight: 900,
+        lineHeight: 1,
+      }}
+    >
+      {label}
+    </div>
+  );
+}
+
+function TerrainMark({ wall, water, conveyor }) {
   if (wall) {
     return <div className="absolute inset-0 rounded-sm" style={{ background: "#020617", zIndex: 0 }} />;
+  }
+  if (water) {
+    return <div className="absolute inset-0 rounded-sm" style={{ zIndex: 0, background: "#0c4a6e" }} />;
   }
   if (conveyor) {
     const angle = dirAngle(conveyor.dir);
@@ -812,6 +894,7 @@ function makeGameStateFromLevel(level) {
     enemies: level.enemies.map((e) => ({ ...e, alive: true })),
     buildings: level.buildings.map((b) => ({ ...b, alive: true })),
     walls: level.walls || [],
+    water: level.water || [],
     conveyors: level.conveyors || [],
   };
 }
@@ -1049,12 +1132,13 @@ function PlayScreen({ level, onBack }) {
 
   function renderTileContent(x, y) {
     const wall = isWall(displayState, x, y);
+    const water = isWater(displayState, x, y);
     const conveyor = displayState.conveyors.find((c) => c.x === x && c.y === y);
     const b = displayState.buildings.find((b) => b.alive && b.x === x && b.y === y);
     const threatLevel = b ? buildingThreatLevel(x, y) : null;
     return (
       <>
-        <TerrainMark wall={wall} conveyor={conveyor} />
+        <TerrainMark wall={wall} water={water} conveyor={conveyor} />
         {b && (
           <div
             className="rounded-sm"
@@ -1104,6 +1188,9 @@ function PlayScreen({ level, onBack }) {
   );
   const handUnits = gameState.units.filter((u) => !u.onBoard && !(drag && drag.unitId === u.id));
   const previewLines = phase === "planning" ? actionPreviewLines(previewState) : [];
+  // Rotators get their own outcome preview — a small spinning ring on the
+  // target enemy showing which way it's about to turn.
+  const rotatePreviewTargets = previewLines.filter((l) => l.type === "rotate").map((l) => ({ x: l.toX, y: l.toY, spin: l.spin }));
 
   // The badge shown to the player is always a compact 1..N rank among the
   // currently placed units, even though the underlying `order` field (used
@@ -1151,9 +1238,13 @@ function PlayScreen({ level, onBack }) {
             0% { transform: scale(0.4); opacity: 0.7; }
             100% { transform: scale(1.5); opacity: 0; }
           }
-          @keyframes impactRingRotate {
+          @keyframes impactRingRotateCW {
             0% { transform: scale(0.3) rotate(0deg); opacity: 0.9; }
             100% { transform: scale(1.7) rotate(140deg); opacity: 0; }
+          }
+          @keyframes impactRingRotateCCW {
+            0% { transform: scale(0.3) rotate(0deg); opacity: 0.9; }
+            100% { transform: scale(1.7) rotate(-140deg); opacity: 0; }
           }
           @keyframes rotatorSpinCW { to { transform: rotate(360deg); } }
           @keyframes rotatorSpinCCW { to { transform: rotate(-360deg); } }
@@ -1169,9 +1260,16 @@ function PlayScreen({ level, onBack }) {
             0%, 100% { box-shadow: 0 0 0 3px #2dd4bf, 0 0 8px 2px rgba(45,212,191,0.55); }
             50% { box-shadow: 0 0 0 3px #2dd4bf, 0 0 16px 5px rgba(45,212,191,0.9); }
           }
+          @keyframes armedSpinCW { to { transform: rotate(360deg); } }
+          @keyframes armedSpinCCW { to { transform: rotate(-360deg); } }
           @keyframes buildingPulse {
             0%, 100% { box-shadow: 0 0 0 2px #ef4444, 0 0 10px 2px rgba(239,68,68,0.55); }
             50% { box-shadow: 0 0 0 2px #ef4444, 0 0 16px 5px rgba(239,68,68,0.85); }
+          }
+          @keyframes enemyFire {
+            0% { transform: scale(1); }
+            35% { transform: scale(1.35); }
+            100% { transform: scale(1); }
           }
           @keyframes beltStripes { to { background-position: -13px 0; } }
         `}</style>
@@ -1183,7 +1281,10 @@ function PlayScreen({ level, onBack }) {
             const y1 = isPull ? l.toY : l.fromY;
             const x2 = isPull ? l.fromX : l.toX;
             const y2 = isPull ? l.fromY : l.toY;
-            const color = isPull ? "#c084fc" : isRotate ? "#fbbf24" : "#2dd4bf";
+            // One color for every action line — push, pull, and rotate all
+            // read as "this unit is about to do something", no need to also
+            // encode which action via color.
+            const color = "#2dd4bf";
             return (
               <g key={i}>
                 <line
@@ -1201,6 +1302,24 @@ function PlayScreen({ level, onBack }) {
               </g>
             );
           })}
+          {rotatePreviewTargets.map((t, i) => (
+            <circle
+              key={`rotate-preview-${i}`}
+              cx={t.x + 0.5}
+              cy={t.y + 0.5}
+              r="0.46"
+              fill="none"
+              stroke="#2dd4bf"
+              strokeWidth="0.05"
+              strokeDasharray="0.16 0.13"
+              opacity="0.85"
+              style={{
+                transformBox: "fill-box",
+                transformOrigin: "center",
+                animation: `${t.spin === "ccw" ? "armedSpinCCW" : "armedSpinCW"} 7.2s linear infinite`,
+              }}
+            />
+          ))}
           {flashTile && flashTile.kind === "kill" && (
             <g key={`flash-${revealStep}`}>
               {[0, 60, 120, 180, 240, 300].map((angle) => (
@@ -1247,39 +1366,39 @@ function PlayScreen({ level, onBack }) {
               stroke="#fbbf24"
               strokeWidth="0.07"
               strokeDasharray="0.22 0.16"
-              style={{ transformBox: "fill-box", transformOrigin: "center", animation: "impactRingRotate 0.55s ease-out" }}
+              style={{
+                transformBox: "fill-box",
+                transformOrigin: "center",
+                animation: `${flashTile.spin === "ccw" ? "impactRingRotateCCW" : "impactRingRotateCW"} 0.55s ease-out`,
+              }}
             />
           )}
         </svg>
 
-        {displayState.enemies.map((enemy, enemyIndex) => (
-          <div
-            key={enemy.id}
-            className="flex items-center justify-center"
-            style={{
-              position: "absolute",
-              left: `${(enemy.x / SIZE) * 100}%`,
-              top: `${(enemy.y / SIZE) * 100}%`,
-              width: `${100 / SIZE}%`,
-              height: `${100 / SIZE}%`,
-              pointerEvents: "none",
-              transition: SLIDE,
-              opacity: enemy.alive ? 1 : 0,
-              transform: enemy.alive ? "scale(1)" : "scale(0.3)",
-              zIndex: 2,
-            }}
-          >
-            <div style={{ position: "relative", width: "62%", height: "62%" }}>
-              <div
-                className="rounded-full bg-red-500 flex items-center justify-center text-white w-full h-full"
-                style={{ fontSize: 15, fontWeight: 900 }}
-              >
-                {enemyIndex + 1}
-              </div>
-              <EnemyFacing dir={enemy.dir} />
+        {displayState.enemies.map((enemy, enemyIndex) => {
+          const isEnemyActing = !!activeActor && activeActor.type === "enemy" && activeActor.id === enemy.id;
+          return (
+            <div
+              key={enemy.id}
+              className="flex items-center justify-center"
+              style={{
+                position: "absolute",
+                left: `${(enemy.x / SIZE) * 100}%`,
+                top: `${(enemy.y / SIZE) * 100}%`,
+                width: `${100 / SIZE}%`,
+                height: `${100 / SIZE}%`,
+                pointerEvents: "none",
+                transition: SLIDE,
+                opacity: enemy.alive ? 1 : 0,
+                transform: enemy.alive ? "scale(1)" : "scale(0.3)",
+                zIndex: 2,
+              }}
+            >
+              <EnemyToken dir={enemy.dir} active={isEnemyActing} />
+              <EnemyTurnBadge label={enemyIndex + 1} />
             </div>
-          </div>
-        ))}
+          );
+        })}
 
         {boardUnits.map((unit) => {
           const displayUnit = displayState.units.find((u) => u.id === unit.id);
@@ -1424,9 +1543,12 @@ function PlayScreen({ level, onBack }) {
 }
 
 function EditorScreen({ initialLevel, onBack, onSaved, onTest }) {
-  const [draft, setDraft] = useState(() => clone(initialLevel));
+  const [draft, setDraft] = useState(() => {
+    const lvl = clone(initialLevel);
+    if (!lvl.water) lvl.water = []; // older level data predates the water tile
+    return lvl;
+  });
   const [tool, setTool] = useState("wall");
-  const [toolDir, setToolDir] = useState(DIRS[1]);
   const [saving, setSaving] = useState(false);
   const [copyStatus, setCopyStatus] = useState("idle");
   const [aimDrag, setAimDrag] = useState(null);
@@ -1436,6 +1558,7 @@ function EditorScreen({ initialLevel, onBack, onSaved, onTest }) {
 
   function clearTile(next, x, y) {
     next.walls = next.walls.filter((w) => !(w.x === x && w.y === y));
+    next.water = next.water.filter((w) => !(w.x === x && w.y === y));
     next.conveyors = next.conveyors.filter((c) => !(c.x === x && c.y === y));
     next.buildings = next.buildings.filter((b) => !(b.x === x && b.y === y));
     next.enemies = next.enemies.filter((e) => !(e.x === x && e.y === y));
@@ -1446,10 +1569,10 @@ function EditorScreen({ initialLevel, onBack, onSaved, onTest }) {
       const next = clone(prev);
       clearTile(next, x, y);
       if (tool === "wall") next.walls.push({ x, y });
-      else if (tool === "conveyor") next.conveyors.push({ x, y, dir: { dx: toolDir.dx, dy: toolDir.dy } });
+      else if (tool === "water") next.water.push({ x, y });
       else if (tool === "building") next.buildings.push({ id: uid("b"), name: `Structure ${next.buildings.length + 1}`, x, y });
       else if (tool === "enemy")
-        next.enemies.push({ id: uid("e"), name: `Enemy ${next.enemies.length + 1}`, x, y, dir: { dx: 1, dy: 0 }, range: 3 });
+        next.enemies.push({ id: uid("e"), name: `Enemy ${next.enemies.length + 1}`, x, y, dir: { dx: 1, dy: 0 } });
       return next;
     });
   }
@@ -1500,7 +1623,7 @@ function EditorScreen({ initialLevel, onBack, onSaved, onTest }) {
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);
     };
-  }, [tool, toolDir]);
+  }, [tool]);
 
   useEffect(() => {
     if (!aimDrag) return;
@@ -1516,15 +1639,10 @@ function EditorScreen({ initialLevel, onBack, onSaved, onTest }) {
         setAimPreview(null);
         return;
       }
-      let dir, range;
-      if (Math.abs(dx) >= Math.abs(dy)) {
-        dir = { dx: dx > 0 ? 1 : -1, dy: 0 };
-        range = Math.max(1, Math.min(8, Math.abs(dx)));
-      } else {
-        dir = { dx: 0, dy: dy > 0 ? 1 : -1 };
-        range = Math.max(1, Math.min(8, Math.abs(dy)));
-      }
-      setAimPreview({ dir, range });
+      // Enemies have unlimited range now, so dragging only ever sets a
+      // direction — how far the drag went doesn't matter, just which way.
+      const dir = Math.abs(dx) >= Math.abs(dy) ? { dx: dx > 0 ? 1 : -1, dy: 0 } : { dx: 0, dy: dy > 0 ? 1 : -1 };
+      setAimPreview({ dir });
     }
     function onUp() {
       setAimPreview((preview) => {
@@ -1532,10 +1650,7 @@ function EditorScreen({ initialLevel, onBack, onSaved, onTest }) {
           setDraft((prev) => {
             const next = clone(prev);
             const enemy = next.enemies.find((en) => en.id === aimDrag.enemyId);
-            if (enemy) {
-              enemy.dir = preview.dir;
-              enemy.range = preview.range;
-            }
+            if (enemy) enemy.dir = preview.dir;
             return next;
           });
         }
@@ -1554,18 +1669,13 @@ function EditorScreen({ initialLevel, onBack, onSaved, onTest }) {
   function addUnit(ability) {
     setDraft((prev) => {
       const next = clone(prev);
-      const label =
-        ability === "push"
-          ? "Pusher"
-          : ability === "pull"
-          ? "Puller"
-          : ability === "rotate"
-          ? "Rotator"
-          : ability === "rotate_ccw"
-          ? "Counter-rotator"
-          : "Blocker";
+      // Both rotator flavors are just "Rotator" — the CW/CCW icon is enough
+      // to tell them apart, so they never get a numbered suffix either.
+      const isRotator = ability === "rotate" || ability === "rotate_ccw";
+      const label = ability === "push" ? "Pusher" : ability === "pull" ? "Puller" : isRotator ? "Rotator" : "Blocker";
       const count = next.units.filter((u) => u.ability === ability).length + 1;
-      next.units.push({ id: uid("u"), name: count > 1 ? `${label} ${count}` : label, ability });
+      const name = isRotator ? label : count > 1 ? `${label} ${count}` : label;
+      next.units.push({ id: uid("u"), name, ability });
       return next;
     });
   }
@@ -1605,7 +1715,8 @@ function EditorScreen({ initialLevel, onBack, onSaved, onTest }) {
   if (aimDrag && aimPreview) {
     let x = aimDrag.startX;
     let y = aimDrag.startY;
-    for (let i = 0; i < aimPreview.range; i++) {
+    // Unlimited range — the preview line just runs to the board edge.
+    while (true) {
       x += aimPreview.dir.dx;
       y += aimPreview.dir.dy;
       if (x < 0 || x >= SIZE || y < 0 || y >= SIZE) break;
@@ -1623,19 +1734,17 @@ function EditorScreen({ initialLevel, onBack, onSaved, onTest }) {
 
   function tileContent(x, y) {
     const wall = draft.walls.find((w) => w.x === x && w.y === y);
+    const water = draft.water.find((w) => w.x === x && w.y === y);
     const conv = draft.conveyors.find((c) => c.x === x && c.y === y);
     const b = draft.buildings.find((b) => b.x === x && b.y === y);
     const e = draft.enemies.find((e) => e.x === x && e.y === y);
     return (
       <>
-        <TerrainMark wall={!!wall} conveyor={conv} />
+        <TerrainMark wall={!!wall} water={!!water} conveyor={conv} />
         {b && <div className="rounded-sm" style={{ width: "52%", height: "52%", zIndex: 1, position: "relative", background: "#f8fafc" }} />}
         {e && (
-          <div style={{ width: "62%", height: "62%", zIndex: 1, position: "relative" }}>
-            <div className="rounded-full bg-red-500 flex items-center justify-center text-white w-full h-full" style={{ fontSize: 14, fontWeight: 900 }}>
-              {e.range}
-            </div>
-            <EnemyFacing dir={e.dir} />
+          <div style={{ zIndex: 1, position: "relative" }}>
+            <EnemyToken dir={e.dir} label={draft.enemies.indexOf(e) + 1} />
           </div>
         )}
       </>
@@ -1682,32 +1791,15 @@ function EditorScreen({ initialLevel, onBack, onSaved, onTest }) {
           <Eraser className="w-5 h-5 text-slate-200" />
         </button>
         <button type="button" onClick={() => setTool("wall")} className={`${toolSwatchClass} ${tool === "wall" ? "border-teal-400" : "border-slate-700"}`} style={{ background: "#020617" }} />
-        <button type="button" onClick={() => setTool("conveyor")} className={`${toolSwatchClass} ${tool === "conveyor" ? "border-teal-400" : "border-slate-700"}`} style={{ background: "#78350f" }}>
-          <span style={{ color: "#fbbf24", fontSize: 16, transform: `rotate(${dirAngle(toolDir)}deg)` }}>{"\u27A4"}</span>
-        </button>
+        <button type="button" onClick={() => setTool("water")} className={`${toolSwatchClass} ${tool === "water" ? "border-teal-400" : "border-slate-700"}`} style={{ background: "#0c4a6e" }} />
         <button type="button" onClick={() => setTool("building")} className={`${toolSwatchClass} ${tool === "building" ? "border-teal-400" : "border-slate-700"} bg-slate-800`}>
           <div className="rounded-sm" style={{ width: 18, height: 18, background: "#f8fafc" }} />
         </button>
         <button type="button" onClick={() => setTool("enemy")} className={`${toolSwatchClass} ${tool === "enemy" ? "border-teal-400" : "border-slate-700"} bg-slate-800`}>
-          <div className="rounded-full bg-red-500" style={{ width: 20, height: 20 }} />
-        </button>
-
-        {tool === "conveyor" && (
-          <div className="flex items-center gap-1 ml-2">
-            {DIRS.map((d) => (
-              <button
-                key={d.label}
-                type="button"
-                onClick={() => setToolDir(d)}
-                className={`w-8 h-8 rounded-md font-bold flex items-center justify-center border-2 ${
-                  toolDir.label === d.label ? "border-teal-400 text-teal-300" : "border-slate-700 text-slate-400"
-                }`}
-              >
-                {d.glyph}
-              </button>
-            ))}
+          <div className="rounded-md flex items-center justify-center" style={{ width: 20, height: 20, background: "#dc2626", color: "#fff", fontSize: 13, fontWeight: 900 }}>
+            ▲
           </div>
-        )}
+        </button>
       </div>
 
       <p className="max-w-md mx-auto mb-3 text-slate-400 font-bold" style={{ fontSize: 12 }}>
@@ -1739,8 +1831,8 @@ function EditorScreen({ initialLevel, onBack, onSaved, onTest }) {
             <line
               x1={aimDrag.startX + 0.5}
               y1={aimDrag.startY + 0.5}
-              x2={aimDrag.startX + 0.5 + aimPreview.dir.dx * aimPreview.range}
-              y2={aimDrag.startY + 0.5 + aimPreview.dir.dy * aimPreview.range}
+              x2={aimDrag.startX + 0.5 + aimPreview.dir.dx * previewTiles.length}
+              y2={aimDrag.startY + 0.5 + aimPreview.dir.dy * previewTiles.length}
               stroke="#fbbf24"
               strokeWidth="0.08"
               strokeLinecap="round"

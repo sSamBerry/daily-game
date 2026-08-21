@@ -16,7 +16,7 @@ for saving levels-in-progress while you design them.
 
 1. Start a chat with Claude, upload or paste `puzzle-lab.jsx`.
 2. Ask Claude to render it as an artifact, or ask it to help you design a
-   new level directly (add enemies, buildings, walls, conveyors, give it a
+   new level directly (add enemies, buildings, walls, water tiles, give it a
    name and hint).
 3. Use the in-app editor to place things and hit "Test play" until it's
    solvable and feels right.

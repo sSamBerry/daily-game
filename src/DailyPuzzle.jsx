@@ -12,10 +12,14 @@ function key(x, y) {
 function isWall(state, x, y) {
   return state.walls.some((w) => w.x === x && w.y === y);
 }
+function isWater(state, x, y) {
+  return (state.water || []).some((w) => w.x === x && w.y === y);
+}
 
 function occupiedSet(state, excludeUnitId) {
   const set = new Set();
   state.walls.forEach((w) => set.add(key(w.x, w.y)));
+  (state.water || []).forEach((w) => set.add(key(w.x, w.y)));
   state.units.forEach((u) => {
     if (u.alive && u.onBoard && u.id !== excludeUnitId) set.add(key(u.x, u.y));
   });
@@ -44,7 +48,9 @@ function threatRay(state, enemy) {
   let x = enemy.x;
   let y = enemy.y;
   let hit = null;
-  for (let step = 1; step <= enemy.range; step++) {
+  // Enemies have unlimited range — the ray only ever stops at the board edge
+  // or something in its way, so this just walks tile-by-tile until then.
+  while (true) {
     x += enemy.dir.dx;
     y += enemy.dir.dy;
     if (x < 0 || x >= SIZE || y < 0 || y >= SIZE) break;
@@ -83,6 +89,8 @@ function resolvePull(state, puller) {
     let x = puller.x + dx;
     let y = puller.y + dy;
     let farthest = null;
+    // Water doesn't block line of sight for a pull, same as it doesn't for
+    // gunfire — a puller can spot and grab an enemy on the far side of it.
     while (x >= 0 && x < SIZE && y >= 0 && y < SIZE) {
       if (isWall(state, x, y)) break;
       const b = state.buildings.find((b) => b.alive && b.x === x && b.y === y);
@@ -111,6 +119,11 @@ function resolvePull(state, puller) {
         break;
       }
     }
+    // The enemy flies over water fine, but can't come to rest on it — if the
+    // tile it would land on (right next to the puller) is water, the pull
+    // just doesn't happen in this direction, same as a push with nowhere to
+    // land. Other directions can still work.
+    if (!collideWith && isWater(state, cx, cy)) continue;
     return { dir: [dx, dy], enemy: farthest, landX: cx, landY: cy, collideWith };
   }
   return null;
@@ -164,7 +177,15 @@ function actionPreviewLines(state) {
       if (result) lines.push({ fromX: unit.x, fromY: unit.y, toX: result.enemy.x, toY: result.enemy.y, type: "pull" });
     } else if (unit.ability === "rotate" || unit.ability === "rotate_ccw") {
       const adj = findPushTarget(state, unit);
-      if (adj) lines.push({ fromX: unit.x, fromY: unit.y, toX: adj.e.x, toY: adj.e.y, type: "rotate" });
+      if (adj)
+        lines.push({
+          fromX: unit.x,
+          fromY: unit.y,
+          toX: adj.e.x,
+          toY: adj.e.y,
+          type: "rotate",
+          spin: unit.ability === "rotate" ? "cw" : "ccw",
+        });
     }
   }
   return lines;
@@ -333,8 +354,9 @@ function computeResolution(initial) {
         impacts.push(null);
       }
     } else if (unit.ability === "block") {
-      logs.push(`${unit.name} holds the line.`);
-      impacts.push(null);
+      // Blocking is passive — it just occupies its tile and absorbs shots
+      // whenever they come, so it doesn't take an active "turn" here.
+      continue;
     } else if (unit.ability === "rotate" || unit.ability === "rotate_ccw") {
       const adj = findPushTarget(cur, unit);
       if (adj) {
@@ -344,7 +366,7 @@ function computeResolution(initial) {
             ? { dx: -enemy.dir.dy, dy: enemy.dir.dx }
             : { dx: enemy.dir.dy, dy: -enemy.dir.dx };
         logs.push(`${unit.name} rotates ${enemy.name}.`);
-        impacts.push({ x: enemy.x, y: enemy.y, kind: "rotate" });
+        impacts.push({ x: enemy.x, y: enemy.y, kind: "rotate", spin: unit.ability === "rotate" ? "cw" : "ccw" });
       } else {
         logs.push(`${unit.name} finds nothing to rotate.`);
         impacts.push(null);
@@ -358,10 +380,13 @@ function computeResolution(initial) {
     if (!enemy.alive) continue;
     const { hit } = threatRay(cur, enemy);
     if (!hit) {
-      logs.push(`${enemy.name} finds nothing in range.`);
+      logs.push(`${enemy.name} finds nothing in its path.`);
       impacts.push(null);
     } else if (hit.type === "wall") {
       logs.push(`${enemy.name}'s attack is absorbed by a wall.`);
+      impacts.push(null);
+    } else if (hit.type === "unit" && hit.obj.ability === "block") {
+      logs.push(`${enemy.name}'s attack is absorbed by ${hit.obj.name}.`);
       impacts.push(null);
     } else {
       logs.push(`${enemy.name} destroys ${hit.obj.name}.`);
@@ -443,8 +468,8 @@ const BUILT_IN_LEVELS = [
     date: "2026-08-21",
     units: [
       { id: "u-mt1tidi4-2gfxf", name: "Rotator", ability: "rotate" },
-      { id: "u-mt1tidyc-1hysi", name: "Rotator 2", ability: "rotate" },
-      { id: "u-mt1tifie-qzgmv", name: "Counter-rotator", ability: "rotate_ccw" },
+      { id: "u-mt1tidyc-1hysi", name: "Rotator", ability: "rotate" },
+      { id: "u-mt1tifie-qzgmv", name: "Rotator", ability: "rotate_ccw" },
     ],
     enemies: [
       { id: "e-mt1tnvut-3mmad", name: "Enemy 1", x: 1, y: 6, dir: { dx: 0, dy: -1 }, range: 2 },
@@ -642,7 +667,7 @@ const BUILT_IN_LEVELS = [
     hint: "Two redirects and a block. Turn each enemy to face the other before it can fire.",
     units: [
       { id: "rotcw", name: "Rotator", ability: "rotate" },
-      { id: "rotccw", name: "Counter-rotator", ability: "rotate_ccw" },
+      { id: "rotccw", name: "Rotator", ability: "rotate_ccw" },
       { id: "blocker", name: "Blocker", ability: "block" },
     ],
     enemies: [
@@ -668,7 +693,7 @@ const BUILT_IN_LEVELS = [
     hint: "A wall closes the direct pull approach. A counter-rotation handles the rest.",
     units: [
       { id: "puller", name: "Puller", ability: "pull" },
-      { id: "rotccw", name: "Counter-rotator", ability: "rotate_ccw" },
+      { id: "rotccw", name: "Rotator", ability: "rotate_ccw" },
       { id: "blocker", name: "Blocker", ability: "block" },
     ],
     enemies: [
@@ -686,6 +711,84 @@ const BUILT_IN_LEVELS = [
       { id: "b5", name: "Structure J", x: 3, y: 0 },
     ],
     walls: [{ x: 1, y: 1 }],
+    conveyors: [],
+  },
+  {
+    id: "downtown",
+    name: "Downtown",
+    hint: "",
+    date: "2026-08-22",
+    units: [
+      { id: "u-mt3djg4k-ysg9j", name: "Puller", ability: "pull" },
+      { id: "u-mt3djgdc-yk7r9", name: "Blocker", ability: "block" },
+      { id: "u-mt3dmz73-vgg3p", name: "Rotator", ability: "rotate" },
+    ],
+    enemies: [
+      { id: "e-mt3disyr-u83a6", name: "Enemy 1", x: 0, y: 1, dir: { dx: 1, dy: 0 }, range: 7 },
+      { id: "e-mt3diwet-l179n", name: "Enemy 3", x: 4, y: 5, dir: { dx: 1, dy: 0 }, range: 1 },
+      { id: "e-mt3dixi7-7074z", name: "Enemy 4", x: 4, y: 6, dir: { dx: 1, dy: 0 }, range: 1 },
+      { id: "e-mt3dj1b8-7g2lj", name: "Enemy 5", x: 2, y: 5, dir: { dx: 0, dy: -1 }, range: 5 },
+      { id: "e-mt3dj99s-pqmh8", name: "Enemy 5", x: 4, y: 2, dir: { dx: -1, dy: 0 }, range: 4 },
+      { id: "e-mt3dm8r9-gh4jb", name: "Enemy 6", x: 0, y: 3, dir: { dx: 0, dy: 1 }, range: 1 },
+    ],
+    buildings: [
+      { id: "b-mt3dilxi-j7i4x", name: "Structure 1", x: 0, y: 0 },
+      { id: "b-mt3dimhw-04bmq", name: "Structure 2", x: 2, y: 0 },
+      { id: "b-mt3din1b-gist5", name: "Structure 3", x: 4, y: 0 },
+      { id: "b-mt3dincg-uxfjr", name: "Structure 4", x: 4, y: 1 },
+      { id: "b-mt3diock-9butp", name: "Structure 5", x: 6, y: 5 },
+      { id: "b-mt3diohm-cfmdn", name: "Structure 6", x: 5, y: 5 },
+      { id: "b-mt3diomc-z28ah", name: "Structure 7", x: 5, y: 6 },
+      { id: "b-mt3diomv-ehg07", name: "Structure 8", x: 6, y: 6 },
+      { id: "b-mt3dipzt-1hjh3", name: "Structure 9", x: 2, y: 7 },
+      { id: "b-mt3diq4g-fu7v8", name: "Structure 10", x: 2, y: 6 },
+      { id: "b-mt3diq95-8hpr9", name: "Structure 12", x: 1, y: 5 },
+      { id: "b-mt3diqdt-11hsx", name: "Structure 14", x: 0, y: 4 },
+      { id: "b-mt3dljcw-upy8b", name: "Structure 13", x: 0, y: 2 },
+    ],
+    walls: [
+      { x: 5, y: 0 }, { x: 5, y: 1 }, { x: 5, y: 2 }, { x: 5, y: 3 }, { x: 5, y: 4 },
+      { x: 6, y: 4 }, { x: 7, y: 4 }, { x: 7, y: 3 }, { x: 7, y: 2 }, { x: 7, y: 1 }, { x: 7, y: 0 },
+      { x: 6, y: 0 }, { x: 6, y: 1 }, { x: 6, y: 2 }, { x: 6, y: 3 },
+      { x: 7, y: 7 }, { x: 6, y: 7 }, { x: 5, y: 7 }, { x: 4, y: 7 }, { x: 3, y: 7 },
+      { x: 1, y: 7 }, { x: 1, y: 6 }, { x: 0, y: 7 }, { x: 0, y: 6 }, { x: 0, y: 5 },
+    ],
+    conveyors: [],
+  },
+  {
+    id: "thames",
+    name: "Thames",
+    hint: "",
+    date: "2026-08-23",
+    units: [
+      { id: "u-mt3f89yj-1olaw", name: "Blocker", ability: "block" },
+      { id: "u-mt3f8alo-sb7qu", name: "Puller", ability: "pull" },
+      { id: "u-mt3f8zm4-v998l", name: "Pusher", ability: "push" },
+    ],
+    enemies: [
+      { id: "e-mt3fn2yp-xr2i3", name: "Enemy 1", x: 5, y: 1, dir: { dx: -1, dy: 0 } },
+      { id: "e-mt3fn60g-6y82p", name: "Enemy 2", x: 1, y: 2, dir: { dx: 0, dy: 1 } },
+      { id: "e-mt3fn78f-psrri", name: "Enemy 3", x: 5, y: 3, dir: { dx: -1, dy: 0 } },
+      { id: "e-mt3fn82z-mg83h", name: "Enemy 4", x: 0, y: 6, dir: { dx: 1, dy: 0 } },
+    ],
+    buildings: [
+      { id: "b-mt3f7swm-jlvru", name: "Structure 1", x: 1, y: 1 },
+      { id: "b-mt3f7tai-et3y4", name: "Structure 2", x: 1, y: 3 },
+      { id: "b-mt3f7u1t-ycd6l", name: "Structure 3", x: 1, y: 4 },
+      { id: "b-mt3fkuty-ai3nf", name: "Structure 4", x: 0, y: 3 },
+      { id: "b-mt3fkv1u-5dfp7", name: "Structure 5", x: 0, y: 4 },
+      { id: "b-mt3fmtlp-o4f99", name: "Structure 6", x: 1, y: 6 },
+      { id: "b-mt3fnvc1-5nxth", name: "Structure 7", x: 5, y: 7 },
+    ],
+    walls: [
+      { x: 6, y: 1 }, { x: 6, y: 3 }, { x: 6, y: 7 },
+      { x: 6, y: 0 }, { x: 7, y: 0 }, { x: 7, y: 1 }, { x: 7, y: 2 }, { x: 7, y: 3 },
+      { x: 7, y: 4 }, { x: 7, y: 5 }, { x: 7, y: 6 }, { x: 7, y: 7 }, { x: 6, y: 6 }, { x: 6, y: 4 },
+    ],
+    water: [
+      { x: 2, y: 0 }, { x: 2, y: 1 }, { x: 2, y: 2 }, { x: 2, y: 3 }, { x: 2, y: 4 }, { x: 2, y: 5 }, { x: 2, y: 6 }, { x: 2, y: 7 },
+      { x: 3, y: 7 }, { x: 3, y: 6 }, { x: 3, y: 5 }, { x: 3, y: 4 }, { x: 3, y: 3 }, { x: 3, y: 2 }, { x: 3, y: 0 }, { x: 3, y: 1 },
+    ],
     conveyors: [],
   },
 ];
@@ -821,29 +924,93 @@ function UnitIcon({ unit, size = 26, facingAngle = null, spinAnimation = null, a
   );
 }
 
-function EnemyFacing({ dir }) {
+// Same visual language as the unit tokens (Pusher/Puller/Blocker/Rotator) —
+// a filled rounded-square badge — so pieces on both sides read as the same
+// kind of thing. A bold arrow icon inside rotates to face the enemy's
+// direction; the turn-order number sits in its own corner badge rather than
+// dead-center, since the arrow already owns the middle of the tile.
+function EnemyToken({ dir, label, active }) {
+  const angle = upBasedAngle(dir);
   return (
-    <svg
-      viewBox="0 0 24 24"
-      style={{
-        position: "absolute",
-        top: "50%",
-        left: "50%",
-        width: 15,
-        height: 15,
-        transform: `translate(-50%, -50%) rotate(${upBasedAngle(dir)}deg) translateY(-13px)`,
-        filter: "drop-shadow(0 1px 1.5px rgba(0,0,0,0.75))",
-        pointerEvents: "none",
-      }}
-    >
-      <path d="M12 2 L19.5 16 L12 12 L4.5 16 Z" fill="#ef4444" />
-    </svg>
+    <div style={{ position: "relative", width: "74%", height: "74%" }}>
+      <div
+        className="flex items-center justify-center rounded-md w-full h-full"
+        style={{
+          background: "#dc2626",
+          boxShadow: active ? "0 0 0 3px #fbbf24, 0 0 14px 3px rgba(251,191,36,0.7)" : "none",
+          animation: active ? "enemyFire 0.5s ease-in-out" : "none",
+          transition: "box-shadow 0.25s ease",
+        }}
+      >
+        <span
+          style={{
+            display: "inline-block",
+            fontSize: 30,
+            lineHeight: 1,
+            color: "#ffffff",
+            transform: `rotate(${angle}deg)`,
+            transition: "transform 0.25s ease",
+          }}
+        >
+          ▲
+        </span>
+      </div>
+      {label != null && (
+        <div
+          className="rounded-full flex items-center justify-center"
+          style={{
+            position: "absolute",
+            top: "2%",
+            right: "6%",
+            width: 16,
+            height: 16,
+            background: "#1c1917",
+            border: "1.5px solid #fca5a5",
+            color: "#fca5a5",
+            fontSize: 10,
+            fontWeight: 900,
+            lineHeight: 1,
+          }}
+        >
+          {label}
+        </div>
+      )}
+    </div>
   );
 }
 
-function TerrainMark({ wall, conveyor }) {
+// The turn-order badge for an enemy on the board — positioned relative to
+// the *full tile*, not the 74%-sized arrow body, so it lands in exactly the
+// same corner as a unit's own turn-order badge.
+function EnemyTurnBadge({ label }) {
+  return (
+    <div
+      className="rounded-full flex items-center justify-center"
+      style={{
+        position: "absolute",
+        top: "2%",
+        right: "6%",
+        width: 16,
+        height: 16,
+        background: "#1c1917",
+        border: "1.5px solid #fca5a5",
+        color: "#fca5a5",
+        fontSize: 10,
+        fontWeight: 900,
+        lineHeight: 1,
+      }}
+    >
+      {label}
+    </div>
+  );
+}
+
+function TerrainMark({ wall, water, conveyor }) {
   if (wall) {
     return <div className="absolute inset-0 rounded-sm" style={{ background: "#0c0a09", zIndex: 0 }} />;
+  }
+  if (water) {
+    return <div className="absolute inset-0 rounded-sm" style={{ zIndex: 0, background: "#0c4a6e" }} />;
   }
   if (conveyor) {
     const angle = dirAngle(conveyor.dir);
@@ -871,6 +1038,7 @@ function makeGameStateFromLevel(level) {
     enemies: level.enemies.map((e) => ({ ...e, alive: true })),
     buildings: level.buildings.map((b) => ({ ...b, alive: true })),
     walls: level.walls || [],
+    water: level.water || [],
     conveyors: level.conveyors || [],
   };
 }
@@ -932,25 +1100,15 @@ function RulesModal({ onClose }) {
         <RuleRow
           title="Enemies"
           swatch={
-            <div style={{ position: "relative", width: 22, height: 22 }}>
-              <div className="rounded-full bg-red-500" style={{ width: "100%", height: "100%" }} />
-              <div
-                style={{
-                  position: "absolute",
-                  top: -7,
-                  left: "50%",
-                  width: 0,
-                  height: 0,
-                  borderLeft: "4px solid transparent",
-                  borderRight: "4px solid transparent",
-                  borderBottom: "7px solid #fff",
-                  transform: "translateX(-50%)",
-                }}
-              />
+            <div
+              className="rounded-md flex items-center justify-center"
+              style={{ width: 26, height: 26, background: "#dc2626", color: "#fff", fontSize: 18, fontWeight: 900 }}
+            >
+              ▲
             </div>
           }
         >
-          Each one faces a direction (white arrow) and fires in a straight line the moment you hit Play.
+          The arrow points the way it's aimed — fires in a straight line the moment you hit Play.
         </RuleRow>
 
         <RuleRow
@@ -1020,7 +1178,7 @@ function RulesModal({ onClose }) {
             </div>
           }
         >
-          Just occupies its tile — use it to soak a shot, or to block where a pushed/pulled enemy would land.
+          Just occupies its tile — permanently blocks any shots down its line, or blocks where a pushed/pulled enemy would land.
         </RuleRow>
 
         <RuleRow
@@ -1105,6 +1263,10 @@ function PlayScreen({ level, onBack }) {
   const [showRules, setShowRules] = useState(false);
   const [showIntro, setShowIntro] = useState(false);
   const [bulletPos, setBulletPos] = useState(null);
+  // Whether the current step's kill (if any) is allowed to actually show as
+  // dead yet — held back until the traveling bullet visually arrives, so a
+  // unit/building doesn't vanish before the shot that kills it gets there.
+  const [killRevealed, setKillRevealed] = useState(true);
   const placementCounterRef = useRef(0);
 
   useEffect(() => {
@@ -1288,6 +1450,27 @@ function PlayScreen({ level, onBack }) {
   // instantly.
   const flashDelay = activeEnemyRay ? 0.5 : 0;
 
+  // A kill from gunfire shouldn't remove its target from the board until the
+  // bullet has actually traveled there — push/pull kills (flashDelay 0) have
+  // no bullet to wait on, so those still land instantly.
+  useEffect(() => {
+    if (flashTile && flashTile.kind === "kill" && flashDelay > 0) {
+      setKillRevealed(false);
+      const t = setTimeout(() => setKillRevealed(true), flashDelay * 1000);
+      return () => clearTimeout(t);
+    }
+    setKillRevealed(true);
+  }, [revealStep, phase]);
+
+  // While a gunfire kill is held back (see above), render buildings/units/
+  // enemies from the snapshot just *before* this step instead of the
+  // (already-dead) current one, so the target stays visible until the bullet
+  // lands. Nothing else differs between those two snapshots for a kill step,
+  // so this is safe to swap in wholesale.
+  const isPendingKill = !killRevealed && flashTile && flashTile.kind === "kill" && flashDelay > 0;
+  const renderState = isPendingKill ? resolution.snapshots[revealStep - 1] : displayState;
+  const activeKillTarget = isPendingKill ? { x: flashTile.x, y: flashTile.y } : null;
+
   // Enemies that have already fired their attack, as of the currently displayed
   // snapshot. Once an enemy is in this set it stops contributing any threat
   // overlay — no ray, no "will be hit" marker on buildings in its old path.
@@ -1430,13 +1613,19 @@ function PlayScreen({ level, onBack }) {
   }
 
   function renderTileContent(x, y) {
-    const wall = isWall(displayState, x, y);
-    const conveyor = displayState.conveyors.find((c) => c.x === x && c.y === y);
-    const b = displayState.buildings.find((b) => b.alive && b.x === x && b.y === y);
+    const wall = isWall(renderState, x, y);
+    const water = isWater(renderState, x, y);
+    const conveyor = renderState.conveyors.find((c) => c.x === x && c.y === y);
+    const b = renderState.buildings.find((b) => b.alive && b.x === x && b.y === y);
     const threatLevel = b ? buildingThreatLevel(x, y) : null;
+    // The one tile actively getting hit this step (bullet in flight, target
+    // held alive until it lands) reads as an urgent white pulse instead of
+    // the usual red "incoming" warning, which stops applying the instant the
+    // enemy fires.
+    const isBeingHit = !!(activeKillTarget && activeKillTarget.x === x && activeKillTarget.y === y);
     return (
       <>
-        <TerrainMark wall={wall} conveyor={conveyor} />
+        <TerrainMark wall={wall} water={water} conveyor={conveyor} />
         {b && (
           <div
             className="rounded-sm"
@@ -1445,22 +1634,28 @@ function PlayScreen({ level, onBack }) {
               height: "52%",
               zIndex: 2,
               position: "relative",
-              background:
-                threatLevel === "bold"
-                  ? "linear-gradient(155deg, #fff1f1 0%, #fecaca 100%)"
-                  : threatLevel === "light"
-                  ? "linear-gradient(155deg, #f8fafc 0%, #fee2e2 100%)"
-                  : "#f8fafc",
-              boxShadow:
-                threatLevel === "bold"
-                  ? "0 0 0 2px #ef4444, 0 0 10px 2px rgba(239,68,68,0.55)"
-                  : threatLevel === "light"
-                  ? "0 0 0 2px rgba(239,68,68,0.5)"
-                  : "0 1px 2px rgba(0,0,0,0.25)",
-              animation: threatLevel === "bold" ? "buildingPulse 1.4s ease-in-out infinite" : "none",
+              background: isBeingHit
+                ? "#ffffff"
+                : threatLevel === "bold"
+                ? "linear-gradient(155deg, #fff1f1 0%, #fecaca 100%)"
+                : threatLevel === "light"
+                ? "linear-gradient(155deg, #f8fafc 0%, #fee2e2 100%)"
+                : "#f8fafc",
+              boxShadow: isBeingHit
+                ? "0 0 0 2px #ffffff, 0 0 14px 4px rgba(255,255,255,0.9)"
+                : threatLevel === "bold"
+                ? "0 0 0 2px #ef4444, 0 0 10px 2px rgba(239,68,68,0.55)"
+                : threatLevel === "light"
+                ? "0 0 0 2px rgba(239,68,68,0.5)"
+                : "0 1px 2px rgba(0,0,0,0.25)",
+              animation: isBeingHit
+                ? "buildingPulseWhite 0.4s ease-in-out infinite"
+                : threatLevel === "bold"
+                ? "buildingPulse 1.4s ease-in-out infinite"
+                : "none",
             }}
           >
-            {threatLevel === "bold" && (
+            {(isBeingHit || threatLevel === "bold") && (
               <div
                 className="absolute inset-0 flex items-center justify-center"
                 style={{ color: "#b91c1c", fontSize: 13, fontWeight: 900, lineHeight: 1 }}
@@ -1499,6 +1694,11 @@ function PlayScreen({ level, onBack }) {
     phase === "planning"
       ? movePreviewTiles(previewState).filter((p) => p.kind === "land" && !(draggedUnit && p.unitId === draggedUnit.id))
       : [];
+  // Rotators get their own outcome preview — a small spinning ring on the
+  // target enemy showing which way it's about to turn — the same kind of
+  // "here's what happens" heads-up push/pull already get from the line above
+  // plus their landing marker.
+  const rotatePreviewTargets = previewLines.filter((l) => l.type === "rotate").map((l) => ({ x: l.toX, y: l.toY, spin: l.spin }));
 
   // The badge shown to the player is always a compact 1..N rank among the
   // currently placed units, even though the underlying `order` field (used
@@ -1590,9 +1790,13 @@ function PlayScreen({ level, onBack }) {
             0% { transform: scale(0.4); opacity: 0.7; }
             100% { transform: scale(1.5); opacity: 0; }
           }
-          @keyframes impactRingRotate {
+          @keyframes impactRingRotateCW {
             0% { transform: scale(0.3) rotate(0deg); opacity: 0.9; }
             100% { transform: scale(1.7) rotate(140deg); opacity: 0; }
+          }
+          @keyframes impactRingRotateCCW {
+            0% { transform: scale(0.3) rotate(0deg); opacity: 0.9; }
+            100% { transform: scale(1.7) rotate(-140deg); opacity: 0; }
           }
           @keyframes rotatorSpinCW { to { transform: rotate(360deg); } }
           @keyframes rotatorSpinCCW { to { transform: rotate(-360deg); } }
@@ -1608,9 +1812,15 @@ function PlayScreen({ level, onBack }) {
             0%, 100% { box-shadow: 0 0 0 3px #2dd4bf, 0 0 8px 2px rgba(45,212,191,0.55); }
             50% { box-shadow: 0 0 0 3px #2dd4bf, 0 0 16px 5px rgba(45,212,191,0.9); }
           }
+          @keyframes armedSpinCW { to { transform: rotate(360deg); } }
+          @keyframes armedSpinCCW { to { transform: rotate(-360deg); } }
           @keyframes buildingPulse {
             0%, 100% { box-shadow: 0 0 0 2px #ef4444, 0 0 10px 2px rgba(239,68,68,0.55); }
             50% { box-shadow: 0 0 0 2px #ef4444, 0 0 16px 5px rgba(239,68,68,0.85); }
+          }
+          @keyframes buildingPulseWhite {
+            0%, 100% { box-shadow: 0 0 0 2px #ffffff, 0 0 10px 3px rgba(255,255,255,0.75); }
+            50% { box-shadow: 0 0 0 2px #ffffff, 0 0 18px 6px rgba(255,255,255,1); }
           }
           @keyframes beltStripes { to { background-position: -13px 0; } }
           @keyframes enemyFire {
@@ -1631,7 +1841,10 @@ function PlayScreen({ level, onBack }) {
             const y1 = isPull ? l.toY : l.fromY;
             const x2 = isPull ? l.fromX : l.toX;
             const y2 = isPull ? l.fromY : l.toY;
-            const color = isPull ? "#c084fc" : isRotate ? "#fbbf24" : "#2dd4bf";
+            // One color for every action line — push, pull, and rotate all
+            // read as "this unit is about to do something", no need to also
+            // encode which action via color.
+            const color = "#2dd4bf";
             return (
               <g key={i}>
                 <line
@@ -1658,6 +1871,24 @@ function PlayScreen({ level, onBack }) {
               fill="rgba(239,68,68,0.3)"
               stroke="rgba(248,113,113,0.75)"
               strokeWidth="0.05"
+            />
+          ))}
+          {rotatePreviewTargets.map((t, i) => (
+            <circle
+              key={`rotate-preview-${i}`}
+              cx={t.x + 0.5}
+              cy={t.y + 0.5}
+              r="0.46"
+              fill="none"
+              stroke="#2dd4bf"
+              strokeWidth="0.05"
+              strokeDasharray="0.16 0.13"
+              opacity="0.85"
+              style={{
+                transformBox: "fill-box",
+                transformOrigin: "center",
+                animation: `${t.spin === "ccw" ? "armedSpinCCW" : "armedSpinCW"} 7.2s linear infinite`,
+              }}
             />
           ))}
           {flashTile && flashTile.kind === "kill" && (
@@ -1734,12 +1965,16 @@ function PlayScreen({ level, onBack }) {
               stroke="#fbbf24"
               strokeWidth="0.07"
               strokeDasharray="0.22 0.16"
-              style={{ transformBox: "fill-box", transformOrigin: "center", animation: "impactRingRotate 0.55s ease-out" }}
+              style={{
+                transformBox: "fill-box",
+                transformOrigin: "center",
+                animation: `${flashTile.spin === "ccw" ? "impactRingRotateCCW" : "impactRingRotateCW"} 0.55s ease-out`,
+              }}
             />
           )}
         </svg>
 
-        {displayState.enemies.map((enemy, enemyIndex) => {
+        {renderState.enemies.map((enemy, enemyIndex) => {
           const isEnemyActing = !!activeActor && activeActor.type === "enemy" && activeActor.id === enemy.id;
           return (
             <div
@@ -1758,21 +1993,8 @@ function PlayScreen({ level, onBack }) {
                 zIndex: 2,
               }}
             >
-              <div style={{ position: "relative", width: "62%", height: "62%" }}>
-                <div
-                  className="rounded-full bg-red-500 flex items-center justify-center text-white w-full h-full"
-                  style={{
-                    fontSize: 15,
-                    fontWeight: 900,
-                    boxShadow: isEnemyActing ? "0 0 0 3px #fde047, 0 0 16px 5px rgba(253,224,71,0.85)" : "none",
-                    animation: isEnemyActing ? "enemyFire 0.5s ease-in-out" : "none",
-                    transition: "box-shadow 0.25s ease",
-                  }}
-                >
-                  {enemyIndex + 1}
-                </div>
-                <EnemyFacing dir={enemy.dir} />
-              </div>
+              <EnemyToken dir={enemy.dir} active={isEnemyActing} />
+              <EnemyTurnBadge label={enemyIndex + 1} />
             </div>
           );
         })}
@@ -1799,7 +2021,7 @@ function PlayScreen({ level, onBack }) {
         )}
 
         {boardUnits.map((unit) => {
-          const displayUnit = displayState.units.find((u) => u.id === unit.id);
+          const displayUnit = renderState.units.find((u) => u.id === unit.id);
           const isActing = !!activeActor && activeActor.type === "unit" && activeActor.id === unit.id;
           const isRotatorAbility = unit.ability === "rotate" || unit.ability === "rotate_ccw";
           const isActingRotator = isActing && isRotatorAbility;
