@@ -809,14 +809,30 @@ function EnemyTurnBadge({ label }) {
   );
 }
 
-function TerrainMark({ wall, water, conveyor }) {
+// threat is null | "bold" | "light" — a ray traveling over a passable
+// terrain tile (water, conveyor) still needs to read as threatened, but
+// those tiles paint a solid fill over the whole tile, which would otherwise
+// hide the plain tile's red threat background entirely and leave only the
+// (easy to miss) red border. A translucent red wash on top of the terrain
+// fill keeps both signals visible at once.
+function threatWashStyle(threat) {
+  if (!threat) return null;
+  return { position: "absolute", inset: 0, zIndex: 0, background: threat === "bold" ? "rgba(239,68,68,0.55)" : "rgba(239,68,68,0.32)" };
+}
+
+function TerrainMark({ wall, water, conveyor, threat }) {
   if (wall) {
     return <div className="absolute inset-0 rounded-sm" style={{ background: "#4b2e73", zIndex: 0 }} />;
   }
   if (water) {
     // A pastel sky-blue, distinct from both the mint unit color and the
     // board's white base tile — solid fill only, no wave decoration.
-    return <div className="absolute inset-0 rounded-sm" style={{ zIndex: 0, background: "#6ec3e8" }} />;
+    return (
+      <>
+        <div className="absolute inset-0 rounded-sm" style={{ zIndex: 0, background: "#6ec3e8" }} />
+        {threat && <div className="rounded-sm" style={threatWashStyle(threat)} />}
+      </>
+    );
   }
   if (conveyor) {
     const angle = dirAngle(conveyor.dir);
@@ -832,6 +848,7 @@ function TerrainMark({ wall, water, conveyor }) {
             opacity: 0.6,
           }}
         />
+        {threat && <div style={{ ...threatWashStyle(threat), position: "absolute" }} />}
       </div>
     );
   }
@@ -1105,7 +1122,7 @@ function IntroScreen({ onClose, onShowRules }) {
   );
 }
 
-function PlayScreen({ level, onBack }) {
+function PlayScreen({ level, onBack, isDaily = !onBack }) {
   const [gameState, setGameState] = useState(() => makeGameStateFromLevel(level));
   const [phase, setPhase] = useState("planning");
   const [resolution, setResolution] = useState(null);
@@ -1128,7 +1145,7 @@ function PlayScreen({ level, onBack }) {
   useEffect(() => {
     // Only the real daily game greets first-timers — not the level editor's
     // "test play" mode, which reuses this same screen.
-    if (onBack) return;
+    if (!isDaily) return;
     try {
       if (!localStorage.getItem("puzzlelab_seen_intro")) setShowIntro(true);
     } catch (e) {
@@ -1474,6 +1491,7 @@ function PlayScreen({ level, onBack }) {
     const conveyor = renderState.conveyors.find((c) => c.x === x && c.y === y);
     const b = renderState.buildings.find((b) => b.alive && b.x === x && b.y === y);
     const threatLevel = b ? buildingThreatLevel(x, y) : null;
+    const terrainThreat = !wall ? tileThreat(x, y)?.level ?? null : null;
     // The one tile actively getting hit this step (bullet in flight, target
     // held alive until it lands) reads as a fast amber pulse — distinct from
     // and more urgent than the slower red "incoming" warning, which stops
@@ -1483,7 +1501,7 @@ function PlayScreen({ level, onBack }) {
     const isBeingHit = !!(activeKillTarget && activeKillTarget.x === x && activeKillTarget.y === y);
     return (
       <>
-        <TerrainMark wall={wall} water={water} conveyor={conveyor} />
+        <TerrainMark wall={wall} water={water} conveyor={conveyor} threat={terrainThreat} />
         {b && (
           <div
             className="rounded-sm"
@@ -1589,48 +1607,45 @@ function PlayScreen({ level, onBack }) {
       }}
     >
       <div className="max-w-md mx-auto mb-4 relative flex items-center justify-center" style={{ minHeight: 40 }}>
-        {onBack && (
-          <button
-            type="button"
-            onClick={onBack}
-            className="shrink-0"
-            style={{
-              position: "absolute",
-              left: 0,
-              padding: "6px 10px",
-              borderRadius: 10,
-              border: "2.5px solid #4b2e73",
-              background: "#ffffff",
-              color: "#4b2e73",
-              fontFamily: "'DM Mono', monospace",
-              fontSize: 12,
-              fontWeight: 700,
-            }}
-          >
-            Menu
-          </button>
-        )}
-        {!onBack && (
-          <div
-            className="shrink-0 flex items-center gap-1"
-            style={{
-              position: "absolute",
-              left: 0,
-              height: 32,
-              padding: "0 10px",
-              fontSize: 13,
-              fontWeight: 800,
-              color: "#4b2e73",
-              borderRadius: 999,
-              border: "2.5px solid #4b2e73",
-              background: wonToday ? "#fff5b8" : "#ffffff",
-            }}
-            title={wonToday ? "Today's puzzle solved" : "Current streak"}
-          >
-            <span style={{ fontSize: 14, lineHeight: 1 }}>🔥</span>
-            {headerStreak}
-          </div>
-        )}
+        <div className="shrink-0 flex items-center gap-1.5" style={{ position: "absolute", left: 0 }}>
+          {onBack && (
+            <button
+              type="button"
+              onClick={onBack}
+              aria-label="Back to menu"
+              className="shrink-0 flex items-center justify-center"
+              style={{
+                width: 32,
+                height: 32,
+                borderRadius: 10,
+                border: "2.5px solid #4b2e73",
+                background: "#ffffff",
+                color: "#4b2e73",
+              }}
+            >
+              <ArrowLeft className="w-4 h-4" />
+            </button>
+          )}
+          {isDaily && (
+            <div
+              className="shrink-0 flex items-center gap-1"
+              style={{
+                height: 32,
+                padding: "0 10px",
+                fontSize: 13,
+                fontWeight: 800,
+                color: "#4b2e73",
+                borderRadius: 999,
+                border: "2.5px solid #4b2e73",
+                background: wonToday ? "#fff5b8" : "#ffffff",
+              }}
+              title={wonToday ? "Today's puzzle solved" : "Current streak"}
+            >
+              <span style={{ fontSize: 14, lineHeight: 1 }}>🔥</span>
+              {headerStreak}
+            </div>
+          )}
+        </div>
         <h2 style={{ fontFamily: "'Baloo 2', system-ui, sans-serif", fontWeight: 800, color: "#4b2e73", letterSpacing: "-.01em", textAlign: "center", fontSize: 24 }}>
           {level.name}
         </h2>
@@ -2074,7 +2089,7 @@ function PlayScreen({ level, onBack }) {
                 <p style={{ color: "#4b2e73", fontFamily: "'DM Mono', monospace", fontWeight: 700, fontSize: 14, marginBottom: 20 }}>
                   {streak === null ? "\u2014" : `${streak} day streak`}
                 </p>
-                {!onBack && (
+                {isDaily && (
                   <p style={{ color: "#a07fc4", fontFamily: "'DM Mono', monospace", fontWeight: 700, fontSize: 11, marginBottom: 16 }}>
                     Come back tomorrow for the next puzzle.
                   </p>
@@ -2257,9 +2272,23 @@ function ConfigGate({ onUnlock }) {
   }
 
   return (
-    <div style={{ height: "100dvh", display: "flex", alignItems: "center", justifyContent: "center", background: "#1c1917" }}>
-      <form onSubmit={submit} className="bg-stone-800 border-2 border-stone-600 rounded-xl p-6 w-full max-w-xs mx-4">
-        <p className="text-white font-black mb-4" style={{ fontSize: 18 }}>Puzzle lab</p>
+    <div
+      style={{
+        height: "100dvh",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        backgroundColor: "#ffe9f3",
+        backgroundImage: "linear-gradient(#ffffff 2px, transparent 2px), linear-gradient(90deg, #ffffff 2px, transparent 2px)",
+        backgroundSize: "36px 36px",
+      }}
+    >
+      <form
+        onSubmit={submit}
+        className="w-full max-w-xs mx-4"
+        style={{ background: "#ffffff", border: "3px solid #4b2e73", borderRadius: 16, padding: 24, fontFamily: "'Baloo 2', system-ui, sans-serif" }}
+      >
+        <p style={{ color: "#4b2e73", fontWeight: 800, fontSize: 18, marginBottom: 16 }}>Puzzle lab</p>
         <input
           type="password"
           value={value}
@@ -2268,11 +2297,25 @@ function ConfigGate({ onUnlock }) {
             setWrong(false);
           }}
           autoFocus
-          className="w-full bg-stone-900 border-2 border-stone-700 rounded-md px-3 py-2 text-white mb-3 focus:outline-none focus:border-teal-500"
+          className="w-full focus:outline-none"
+          style={{
+            border: "2px solid #4b2e73",
+            borderRadius: 10,
+            padding: "8px 12px",
+            color: "#4b2e73",
+            background: "#fff8fb",
+            marginBottom: 12,
+            fontFamily: "'Baloo 2', system-ui, sans-serif",
+            fontWeight: 700,
+          }}
           placeholder="Password"
         />
-        {wrong && <p className="text-red-400 text-xs font-bold mb-3">Wrong password.</p>}
-        <button type="submit" className="w-full py-2.5 rounded-lg bg-teal-600 text-white font-bold">
+        {wrong && <p style={{ color: "#dc2626", fontFamily: "'DM Mono', monospace", fontSize: 11, fontWeight: 700, marginBottom: 12 }}>Wrong password.</p>}
+        <button
+          type="submit"
+          className="w-full"
+          style={{ padding: "10px 0", borderRadius: 12, border: "2.5px solid #4b2e73", background: "#ffb3d0", color: "#4b2e73", fontWeight: 800 }}
+        >
           Unlock
         </button>
       </form>
@@ -2283,22 +2326,30 @@ function ConfigGate({ onUnlock }) {
 function PuzzleRow({ level, highlight, onEdit, onPlay }) {
   return (
     <div
-      className={`flex items-center justify-between gap-2 rounded-md px-3 py-2 border ${
-        highlight ? "border-teal-500 bg-teal-950" : "border-stone-700 bg-stone-800"
-      }`}
+      className="flex items-center justify-between gap-2 rounded-md px-3 py-2"
+      style={{ border: highlight ? "2px solid #4b2e73" : "1.5px solid #e2c7d8", background: highlight ? "#fff5b8" : "#fff8fb" }}
     >
       <div className="min-w-0">
-        <p className="text-sm text-stone-100 truncate font-bold">
+        <p className="text-sm truncate" style={{ color: "#4b2e73", fontWeight: 800 }}>
           {level.name}
-          {level.date && <span className="ml-2 text-xs text-teal-400 font-bold">{level.date}</span>}
+          {level.date && (
+            <span className="ml-2" style={{ color: "#0d9488", fontFamily: "'DM Mono', monospace", fontSize: 11, fontWeight: 700 }}>
+              {level.date}
+            </span>
+          )}
         </p>
-        {level.hint && <p className="text-xs text-stone-500 truncate">{level.hint}</p>}
+        {level.hint && <p className="text-xs truncate" style={{ color: "#a07fc4", fontFamily: "'DM Mono', monospace" }}>{level.hint}</p>}
       </div>
       <div className="flex items-center gap-1 shrink-0">
-        <button type="button" onClick={() => onPlay(level)} className="px-2 py-1 rounded bg-teal-600 text-white text-xs font-bold">
+        <button
+          type="button"
+          onClick={() => onPlay(level)}
+          className="px-2 py-1 rounded text-xs"
+          style={{ background: "#8ad7d2", border: "1.5px solid #4b2e73", color: "#4b2e73", fontWeight: 800 }}
+        >
           Play
         </button>
-        <button type="button" onClick={() => onEdit(level)} className="p-1.5 rounded border border-stone-600 text-stone-300">
+        <button type="button" onClick={() => onEdit(level)} className="p-1.5 rounded" style={{ border: "1.5px solid #4b2e73", color: "#4b2e73" }}>
           <Pencil className="w-3.5 h-3.5" />
         </button>
       </div>
@@ -2319,30 +2370,37 @@ function PuzzleListScreen({ onEdit, onNew, onPlay }) {
   if (nextNeeded < today) nextNeeded = today;
 
   return (
-    <div className="bg-stone-900 p-6 rounded-xl" style={{ maxWidth: 480, margin: "0 auto" }}>
-      <h2 className="text-white font-black mb-1" style={{ fontSize: 20 }}>Puzzle lab</h2>
-      <p className="text-stone-400 text-sm mb-4">{BUILT_IN_LEVELS.length} puzzles in this build.</p>
+    <div
+      style={{ maxWidth: 480, margin: "0 auto", background: "#ffffff", border: "3px solid #4b2e73", borderRadius: 16, padding: 24, fontFamily: "'Baloo 2', system-ui, sans-serif" }}
+    >
+      <h2 style={{ color: "#4b2e73", fontWeight: 800, fontSize: 20, marginBottom: 4 }}>Puzzle lab</h2>
+      <p style={{ color: "#a07fc4", fontFamily: "'DM Mono', monospace", fontSize: 12, marginBottom: 16 }}>{BUILT_IN_LEVELS.length} puzzles in this build.</p>
 
-      <div className="mb-5 p-3 rounded-lg border-2 border-teal-600" style={{ background: "rgba(13,148,136,0.15)" }}>
-        <p className="text-teal-300 text-xs font-bold uppercase tracking-wide mb-1">Next puzzle needed</p>
-        <p className="text-white font-black" style={{ fontSize: 18 }}>{nextNeeded}</p>
+      <div className="mb-5 p-3 rounded-lg" style={{ border: "2px solid #4b2e73", background: "#fff5b8" }}>
+        <p style={{ color: "#4b2e73", fontFamily: "'DM Mono', monospace", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".05em", marginBottom: 4 }}>
+          Next puzzle needed
+        </p>
+        <p style={{ color: "#4b2e73", fontWeight: 800, fontSize: 18 }}>{nextNeeded}</p>
         <button
           type="button"
           onClick={() => onNew(nextNeeded)}
-          className="mt-2 w-full py-2 rounded-lg bg-teal-600 text-white font-bold text-sm flex items-center justify-center gap-1"
+          className="mt-2 w-full py-2 rounded-lg text-sm flex items-center justify-center gap-1"
+          style={{ background: "#ffb3d0", border: "2px solid #4b2e73", color: "#4b2e73", fontWeight: 800 }}
         >
           <Plus className="w-4 h-4" /> New puzzle for {nextNeeded}
         </button>
       </div>
 
-      <p className="text-xs text-stone-500 uppercase tracking-wide mb-2">Dated puzzles</p>
+      <p style={{ color: "#a07fc4", fontFamily: "'DM Mono', monospace", fontSize: 11, textTransform: "uppercase", letterSpacing: ".05em", marginBottom: 8 }}>Dated puzzles</p>
       <div className="space-y-2 mb-5">
         {dated.map((lvl) => (
           <PuzzleRow key={lvl.id} level={lvl} highlight={lvl.date === today} onEdit={onEdit} onPlay={onPlay} />
         ))}
       </div>
 
-      <p className="text-xs text-stone-500 uppercase tracking-wide mb-2">Undated (rotation) puzzles</p>
+      <p style={{ color: "#a07fc4", fontFamily: "'DM Mono', monospace", fontSize: 11, textTransform: "uppercase", letterSpacing: ".05em", marginBottom: 8 }}>
+        Undated (rotation) puzzles
+      </p>
       <div className="space-y-2">
         {undated.map((lvl) => (
           <PuzzleRow key={lvl.id} level={lvl} onEdit={onEdit} onPlay={onPlay} />
@@ -2519,12 +2577,14 @@ function PuzzleEditorScreen({ initialLevel, onBack, onTest }) {
     }
   }
 
-  function tileClass(x, y) {
+  const tileClassName = "relative aspect-square flex items-center justify-center rounded-sm";
+
+  function tileStyle(x, y) {
     const isAimStart = aimDrag && aimDrag.startX === x && aimDrag.startY === y;
     const inPreview = previewTiles.some((t) => t.x === x && t.y === y);
-    if (isAimStart) return "relative aspect-square flex items-center justify-center rounded-sm border-2 border-teal-400 bg-teal-900";
-    if (inPreview) return "relative aspect-square flex items-center justify-center rounded-sm border-2 border-amber-400 bg-amber-900";
-    return "relative aspect-square flex items-center justify-center rounded-sm border-2 border-stone-700 bg-stone-800";
+    if (isAimStart) return { border: "2px solid #4b2e73", background: "#c9e9e6", touchAction: "none" };
+    if (inPreview) return { border: "2px solid #fbbf24", background: "#fff5b8", touchAction: "none" };
+    return { border: "1px solid #e2c7d8", background: "#ffffff", touchAction: "none" };
   }
 
   function tileContent(x, y) {
@@ -2536,7 +2596,7 @@ function PuzzleEditorScreen({ initialLevel, onBack, onTest }) {
     return (
       <>
         <TerrainMark wall={!!wall} water={!!water} conveyor={conv} />
-        {b && <div className="rounded-sm" style={{ width: "52%", height: "52%", zIndex: 1, position: "relative", background: "#f8fafc" }} />}
+        {b && <div className="rounded-sm" style={{ width: "52%", height: "52%", zIndex: 1, position: "relative", background: "#fff5b8", border: "2px solid #4b2e73", boxSizing: "border-box" }} />}
         {e && (
           <div style={{ zIndex: 1, position: "relative" }}>
             <EnemyToken dir={e.dir} label={draft.enemies.indexOf(e) + 1} />
@@ -2546,57 +2606,89 @@ function PuzzleEditorScreen({ initialLevel, onBack, onTest }) {
     );
   }
 
-  const toolSwatchClass = "w-11 h-11 rounded-md flex items-center justify-center border-2 transition-colors";
+  const toolSwatchStyle = (active) => ({
+    width: 44,
+    height: 44,
+    borderRadius: 10,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    border: active ? "2.5px solid #4b2e73" : "2px solid #e2c7d8",
+    boxSizing: "border-box",
+    background: "#ffffff",
+  });
+  const addUnitBtnStyle = {
+    display: "flex",
+    alignItems: "center",
+    gap: 4,
+    padding: "5px 8px",
+    borderRadius: 8,
+    border: "1.5px solid #4b2e73",
+    color: "#4b2e73",
+    fontFamily: "'DM Mono', monospace",
+    fontSize: 12,
+    fontWeight: 700,
+    background: "#ffffff",
+  };
 
   return (
-    <div className="bg-stone-900 p-6 rounded-xl" style={{ maxWidth: 480, margin: "0 auto" }}>
+    <div style={{ maxWidth: 480, margin: "0 auto", background: "#ffffff", border: "3px solid #4b2e73", borderRadius: 16, padding: 24, fontFamily: "'Baloo 2', system-ui, sans-serif" }}>
       <div className="mb-4 flex items-center justify-between gap-3">
         <input
           value={draft.name}
           onChange={(e) => setDraft((prev) => ({ ...prev, name: e.target.value }))}
-          className="bg-transparent text-white font-black border-b-2 border-stone-700 focus:outline-none focus:border-teal-500 flex-1"
-          style={{ fontSize: 22 }}
+          className="bg-transparent focus:outline-none flex-1"
+          style={{ fontSize: 22, fontWeight: 800, color: "#4b2e73", borderBottom: "2px solid #e2c7d8", paddingBottom: 2 }}
           placeholder="Level name"
         />
-        <button type="button" onClick={onBack} className="shrink-0 p-2 rounded-md border-2 border-stone-600 text-stone-200">
-          <ArrowLeft className="w-5 h-5" />
+        <button
+          type="button"
+          onClick={onBack}
+          className="shrink-0 flex items-center justify-center"
+          style={{ width: 32, height: 32, borderRadius: 10, border: "2.5px solid #4b2e73", background: "#ffffff", color: "#4b2e73" }}
+        >
+          <ArrowLeft className="w-4 h-4" />
         </button>
       </div>
 
       <input
         value={draft.hint}
         onChange={(e) => setDraft((prev) => ({ ...prev, hint: e.target.value }))}
-        className="w-full block bg-stone-800 border-2 border-stone-700 rounded-md px-3 py-2 text-sm text-stone-200 font-bold mb-2"
+        className="w-full block focus:outline-none mb-2"
+        style={{ border: "2px solid #e2c7d8", borderRadius: 10, padding: "8px 12px", fontSize: 13, color: "#4b2e73", fontWeight: 700, background: "#fff8fb" }}
         placeholder="One-line hint shown to the player"
       />
 
       <div className="mb-4 flex items-center gap-2">
-        <label className="text-xs text-stone-500 font-bold shrink-0">Scheduled date</label>
+        <label className="shrink-0" style={{ color: "#a07fc4", fontFamily: "'DM Mono', monospace", fontSize: 11, fontWeight: 700 }}>
+          Scheduled date
+        </label>
         <input
           type="date"
           value={draft.date || ""}
           onChange={(e) => setDraft((prev) => ({ ...prev, date: e.target.value }))}
-          className="bg-stone-800 border-2 border-stone-700 rounded-md px-3 py-2 text-sm text-stone-200 font-bold"
+          className="focus:outline-none"
+          style={{ border: "2px solid #e2c7d8", borderRadius: 10, padding: "6px 10px", fontSize: 13, color: "#4b2e73", fontWeight: 700, background: "#fff8fb" }}
         />
       </div>
 
       <div className="mb-2 flex items-center gap-2 flex-wrap">
-        <button type="button" onClick={() => setTool("eraser")} className={`${toolSwatchClass} ${tool === "eraser" ? "border-teal-400" : "border-stone-700"} bg-stone-800`}>
-          <Eraser className="w-5 h-5 text-stone-200" />
+        <button type="button" onClick={() => setTool("eraser")} style={toolSwatchStyle(tool === "eraser")}>
+          <Eraser className="w-5 h-5" style={{ color: "#4b2e73" }} />
         </button>
-        <button type="button" onClick={() => setTool("wall")} className={`${toolSwatchClass} ${tool === "wall" ? "border-teal-400" : "border-stone-700"}`} style={{ background: "#0c0a09" }} />
-        <button type="button" onClick={() => setTool("water")} className={`${toolSwatchClass} ${tool === "water" ? "border-teal-400" : "border-stone-700"}`} style={{ background: "#0c4a6e" }} />
-        <button type="button" onClick={() => setTool("building")} className={`${toolSwatchClass} ${tool === "building" ? "border-teal-400" : "border-stone-700"} bg-stone-800`}>
-          <div className="rounded-sm" style={{ width: 18, height: 18, background: "#f8fafc" }} />
+        <button type="button" onClick={() => setTool("wall")} style={{ ...toolSwatchStyle(tool === "wall"), background: "#4b2e73" }} />
+        <button type="button" onClick={() => setTool("water")} style={{ ...toolSwatchStyle(tool === "water"), background: "#6ec3e8" }} />
+        <button type="button" onClick={() => setTool("building")} style={toolSwatchStyle(tool === "building")}>
+          <div className="rounded-sm" style={{ width: 18, height: 18, background: "#fff5b8", border: "2px solid #4b2e73", boxSizing: "border-box" }} />
         </button>
-        <button type="button" onClick={() => setTool("enemy")} className={`${toolSwatchClass} ${tool === "enemy" ? "border-teal-400" : "border-stone-700"} bg-stone-800`}>
-          <div className="rounded-md flex items-center justify-center" style={{ width: 20, height: 20, background: "#dc2626", color: "#fff", fontSize: 13, fontWeight: 900 }}>
+        <button type="button" onClick={() => setTool("enemy")} style={toolSwatchStyle(tool === "enemy")}>
+          <div className="rounded-md flex items-center justify-center" style={{ width: 20, height: 20, background: "#dc2626", border: "1.5px solid #4b2e73", color: "#fff", fontSize: 13, fontWeight: 900, boxSizing: "border-box" }}>
             ▲
           </div>
         </button>
       </div>
 
-      <p className="mb-3 text-stone-400 font-bold" style={{ fontSize: 12 }}>
+      <p className="mb-3" style={{ color: "#a07fc4", fontFamily: "'DM Mono', monospace", fontSize: 11, fontWeight: 700 }}>
         Hold and drag to paint. Drag from a placed enemy to aim it.
       </p>
 
@@ -2610,8 +2702,8 @@ function PuzzleEditorScreen({ initialLevel, onBack, onTest }) {
               data-x={x}
               data-y={y}
               onPointerDown={(e) => onTilePointerDown(e, x, y)}
-              className={tileClass(x, y)}
-              style={{ touchAction: "none" }}
+              className={tileClassName}
+              style={tileStyle(x, y)}
             >
               {tileContent(x, y)}
             </button>
@@ -2624,7 +2716,7 @@ function PuzzleEditorScreen({ initialLevel, onBack, onTest }) {
               y1={aimDrag.startY + 0.5}
               x2={aimDrag.startX + 0.5 + aimPreview.dir.dx * previewTiles.length}
               y2={aimDrag.startY + 0.5 + aimPreview.dir.dy * previewTiles.length}
-              stroke="#fbbf24"
+              stroke="#4b2e73"
               strokeWidth="0.08"
               strokeLinecap="round"
             />
@@ -2633,50 +2725,67 @@ function PuzzleEditorScreen({ initialLevel, onBack, onTest }) {
       </div>
 
       <div className="mt-4">
-        <p className="text-xs text-stone-500 mb-1">Units in hand</p>
-        <div className="flex flex-wrap gap-2 p-3 rounded-md border border-dashed border-stone-700 min-h-14">
+        <p className="mb-1" style={{ color: "#a07fc4", fontFamily: "'DM Mono', monospace", fontSize: 11, fontWeight: 700 }}>
+          Units in hand
+        </p>
+        <div className="flex flex-wrap gap-2 p-3 rounded-md min-h-14" style={{ border: "2.5px dashed #a07fc4", background: "#fff8fb" }}>
           {draft.units.map((u) => (
-            <span key={u.id} className="flex items-center gap-1 bg-stone-800 border border-stone-700 rounded px-2 py-1 text-xs text-stone-300">
-              <span className="flex items-center justify-center rounded" style={{ width: 16, height: 16, background: "#0d9488", color: "#fff", fontSize: 11, fontWeight: 900 }}>
+            <span
+              key={u.id}
+              className="flex items-center gap-1 rounded px-2 py-1 text-xs"
+              style={{ background: "#ffffff", border: "1.5px solid #4b2e73", color: "#4b2e73", fontFamily: "'DM Mono', monospace", fontWeight: 700 }}
+            >
+              <span className="flex items-center justify-center rounded" style={{ width: 16, height: 16, background: "#8ad7d2", color: "#4b2e73" }}>
                 <UnitIcon unit={u} size={11} />
               </span>
               {u.name}
-              <button type="button" onClick={() => removeUnit(u.id)} className="text-stone-500 hover:text-red-400 ml-1">
+              <button type="button" onClick={() => removeUnit(u.id)} className="ml-1" style={{ color: "#a07fc4" }}>
                 <Trash2 className="w-3 h-3" />
               </button>
             </span>
           ))}
         </div>
         <div className="flex gap-2 mt-2 flex-wrap">
-          <button type="button" onClick={() => addUnit("push")} className="flex items-center gap-1 px-2 py-1 rounded border border-stone-600 text-xs text-stone-300">
+          <button type="button" onClick={() => addUnit("push")} style={addUnitBtnStyle}>
             <Plus className="w-3 h-3" /> Pusher
           </button>
-          <button type="button" onClick={() => addUnit("pull")} className="flex items-center gap-1 px-2 py-1 rounded border border-stone-600 text-xs text-stone-300">
+          <button type="button" onClick={() => addUnit("pull")} style={addUnitBtnStyle}>
             <Plus className="w-3 h-3" /> Puller
           </button>
-          <button type="button" onClick={() => addUnit("block")} className="flex items-center gap-1 px-2 py-1 rounded border border-stone-600 text-xs text-stone-300">
+          <button type="button" onClick={() => addUnit("block")} style={addUnitBtnStyle}>
             <Plus className="w-3 h-3" /> Blocker
           </button>
-          <button type="button" onClick={() => addUnit("rotate")} className="flex items-center gap-1 px-2 py-1 rounded border border-stone-600 text-xs text-stone-300">
+          <button type="button" onClick={() => addUnit("rotate")} style={addUnitBtnStyle}>
             <Plus className="w-3 h-3" /> Rotator
           </button>
-          <button type="button" onClick={() => addUnit("rotate_ccw")} className="flex items-center gap-1 px-2 py-1 rounded border border-stone-600 text-xs text-stone-300">
+          <button type="button" onClick={() => addUnit("rotate_ccw")} style={addUnitBtnStyle}>
             <Plus className="w-3 h-3" /> Counter-rotator
           </button>
         </div>
       </div>
 
       <div className="mt-4 flex gap-2">
-        <button type="button" onClick={() => onTest(draft)} className="flex-1 py-2 rounded bg-teal-600 text-white text-sm font-medium">
+        <button
+          type="button"
+          onClick={() => onTest(draft)}
+          className="flex-1"
+          style={{ padding: "10px 0", borderRadius: 12, border: "2.5px solid #4b2e73", background: "#ffb3d0", color: "#4b2e73", fontWeight: 800, fontSize: 14 }}
+        >
           Test play
         </button>
-        <button type="button" onClick={handleCopyJson} className="px-4 py-2 rounded border border-stone-600 text-stone-300 text-sm">
+        <button
+          type="button"
+          onClick={handleCopyJson}
+          style={{ padding: "10px 16px", borderRadius: 12, border: "2.5px solid #4b2e73", background: "#ffffff", color: "#4b2e73", fontWeight: 800, fontSize: 14 }}
+        >
           {copyStatus === "copied" ? "Copied!" : copyStatus === "error" ? "Copy failed" : "Copy JSON"}
         </button>
       </div>
 
-      <p className="mt-4 text-xs text-stone-500">Click a tile to place the selected tool. Click again to clear or replace it.</p>
-      <p className="mt-1 text-xs text-stone-500">
+      <p className="mt-4" style={{ color: "#a07fc4", fontFamily: "'DM Mono', monospace", fontSize: 11 }}>
+        Click a tile to place the selected tool. Click again to clear or replace it.
+      </p>
+      <p className="mt-1" style={{ color: "#a07fc4", fontFamily: "'DM Mono', monospace", fontSize: 11 }}>
         "Copy JSON" is the only way this actually ships — paste it into a Claude Code conversation and ask it to add the level to BUILT_IN_LEVELS.
       </p>
     </div>
@@ -2699,7 +2808,15 @@ function ConfigApp() {
   // game itself never scrolls the page) — this screen needs its own explicit
   // height + overflow:auto to actually become a scroll container inside that,
   // since a `minHeight` alone would just get clipped by the ancestor instead.
-  const outerStyle = { height: "100dvh", overflowY: "auto", background: "#1c1917", padding: "24px 16px", boxSizing: "border-box" };
+  const outerStyle = {
+    height: "100dvh",
+    overflowY: "auto",
+    backgroundColor: "#ffe9f3",
+    backgroundImage: "linear-gradient(#ffffff 2px, transparent 2px), linear-gradient(90deg, #ffffff 2px, transparent 2px)",
+    backgroundSize: "36px 36px",
+    padding: "24px 16px",
+    boxSizing: "border-box",
+  };
 
   if (!unlocked) return <ConfigGate onUnlock={() => setUnlocked(true)} />;
 
@@ -2972,7 +3089,7 @@ function DefenderApp() {
         PUZZLE #{dayNumber}
       </p>
       <div className="w-full max-w-md px-4">
-        <PlayScreen level={level} onBack={null} />
+        <PlayScreen level={level} onBack={() => { window.location.href = "/"; }} isDaily />
       </div>
     </div>
   );
