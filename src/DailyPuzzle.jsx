@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { RotateCcw, Magnet, Hand, Info, X, ArrowLeft, Plus, Trash2, Pencil, Eraser } from "lucide-react";
+import { RotateCcw, RotateCw, Magnet, Hand, Info, X, ArrowLeft, Plus, Trash2, Pencil, Eraser } from "lucide-react";
 
 const SIZE = 8;
 
@@ -689,8 +689,6 @@ function upBasedAngle(dir) {
 }
 function unitGlyph(unit) {
   if (unit.ability === "push") return "\u2192";
-  if (unit.ability === "rotate") return "\u21BB";
-  if (unit.ability === "rotate_ccw") return "\u21BA";
   return "\u25A0";
 }
 
@@ -722,6 +720,16 @@ function UnitIcon({ unit, size = 26, facingAngle = null, spinAnimation = null, a
     return <Hand style={{ width: size * 0.72, height: size * 0.72 }} strokeWidth={2.75} />;
   }
   const animation = spinAnimation ? `${spinAnimation} 0.6s ease-in-out` : armedIdle ? `${armedIdle} 1.1s ease-in-out infinite` : "none";
+  // Rotators use real SVG icons rather than the ↻/↺ text glyphs — those
+  // characters aren't in Baloo 2, so the browser falls back to a system font
+  // for just this one glyph, and that font's box metrics don't optically
+  // center the same way, leaving it looking off-center in the badge.
+  if (unit.ability === "rotate") {
+    return <RotateCw style={{ width: size * 0.72, height: size * 0.72, animation, ...rotateStyle }} strokeWidth={2.75} />;
+  }
+  if (unit.ability === "rotate_ccw") {
+    return <RotateCcw style={{ width: size * 0.72, height: size * 0.72, animation, ...rotateStyle }} strokeWidth={2.75} />;
+  }
   return (
     <span
       style={{
@@ -750,7 +758,9 @@ function EnemyToken({ dir, label, active }) {
         className="flex items-center justify-center rounded-md w-full h-full"
         style={{
           background: "#dc2626",
-          boxShadow: active ? "0 0 0 3px #fbbf24, 0 0 14px 3px rgba(251,191,36,0.7)" : "none",
+          border: "2px solid #4b2e73",
+          boxSizing: "border-box",
+          boxShadow: active ? "0 0 0 3px #fbbf24" : "none",
           animation: active ? "enemyFire 0.5s ease-in-out" : "none",
           transition: "box-shadow 0.25s ease",
         }}
@@ -768,26 +778,7 @@ function EnemyToken({ dir, label, active }) {
           ▲
         </span>
       </div>
-      {label != null && (
-        <div
-          className="rounded-full flex items-center justify-center"
-          style={{
-            position: "absolute",
-            top: "2%",
-            right: "6%",
-            width: 16,
-            height: 16,
-            background: "#1c1917",
-            border: "1.5px solid #fca5a5",
-            color: "#fca5a5",
-            fontSize: 10,
-            fontWeight: 900,
-            lineHeight: 1,
-          }}
-        >
-          {label}
-        </div>
-      )}
+      {label != null && <EnemyTurnBadge label={label} />}
     </div>
   );
 }
@@ -805,9 +796,9 @@ function EnemyTurnBadge({ label }) {
         right: "6%",
         width: 16,
         height: 16,
-        background: "#1c1917",
-        border: "1.5px solid #fca5a5",
-        color: "#fca5a5",
+        background: "#ffffff",
+        border: "1.5px solid #4b2e73",
+        color: "#4b2e73",
         fontSize: 10,
         fontWeight: 900,
         lineHeight: 1,
@@ -820,10 +811,12 @@ function EnemyTurnBadge({ label }) {
 
 function TerrainMark({ wall, water, conveyor }) {
   if (wall) {
-    return <div className="absolute inset-0 rounded-sm" style={{ background: "#0c0a09", zIndex: 0 }} />;
+    return <div className="absolute inset-0 rounded-sm" style={{ background: "#4b2e73", zIndex: 0 }} />;
   }
   if (water) {
-    return <div className="absolute inset-0 rounded-sm" style={{ zIndex: 0, background: "#0c4a6e" }} />;
+    // A pastel sky-blue, distinct from both the mint unit color and the
+    // board's white base tile — solid fill only, no wave decoration.
+    return <div className="absolute inset-0 rounded-sm" style={{ zIndex: 0, background: "#6ec3e8" }} />;
   }
   if (conveyor) {
     const angle = dirAngle(conveyor.dir);
@@ -866,12 +859,15 @@ function sortedByPlacement(units) {
 function RuleRow({ swatch, title, children }) {
   return (
     <div className="flex items-start gap-3 mb-3">
-      <div className="shrink-0 flex items-center justify-center rounded-md" style={{ width: 40, height: 40, background: "#292524" }}>
+      <div
+        className="shrink-0 flex items-center justify-center rounded-md"
+        style={{ width: 40, height: 40, background: "#f5eefc", border: "2px solid #4b2e73" }}
+      >
         {swatch}
       </div>
       <div>
-        <p className="text-white font-bold" style={{ fontSize: 13 }}>{title}</p>
-        <p className="text-stone-400" style={{ fontSize: 12, lineHeight: 1.35 }}>{children}</p>
+        <p style={{ color: "#4b2e73", fontFamily: "'Baloo 2', system-ui, sans-serif", fontWeight: 800, fontSize: 14 }}>{title}</p>
+        <p style={{ color: "#a07fc4", fontFamily: "'DM Mono', monospace", fontSize: 11, lineHeight: 1.4 }}>{children}</p>
       </div>
     </div>
   );
@@ -888,24 +884,28 @@ function RulesModal({ onClose }) {
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="bg-stone-800 border-2 border-stone-600 rounded-xl p-5 w-full max-w-xs mx-4"
-        style={{ maxHeight: "85vh", overflowY: "auto", animation: "popIn 0.2s ease-out" }}
+        className="w-full max-w-xs mx-4"
+        style={{
+          background: "#ffffff",
+          border: "3px solid #4b2e73",
+          borderRadius: 16,
+          padding: 20,
+          maxHeight: "85vh",
+          overflowY: "auto",
+          animation: "popIn 0.2s ease-out",
+          fontFamily: "'Baloo 2', system-ui, sans-serif",
+        }}
       >
         <div className="flex items-center justify-between mb-3">
-          <h3 className="text-white font-black" style={{ fontSize: 18 }}>How to play</h3>
-          <button type="button" onClick={onClose} aria-label="Close" className="p-1 rounded-md text-stone-300">
+          <h3 style={{ color: "#4b2e73", fontWeight: 800, fontSize: 18 }}>How to play</h3>
+          <button type="button" onClick={onClose} aria-label="Close" className="p-1 rounded-md" style={{ color: "#4b2e73" }}>
             <X className="w-5 h-5" />
           </button>
         </div>
 
         <RuleRow
           title="Goal"
-          swatch={
-            <div
-              className="rounded-sm"
-              style={{ width: 18, height: 18, background: "#f8fafc", boxShadow: "0 1px 2px rgba(0,0,0,0.25)" }}
-            />
-          }
+          swatch={<div className="rounded-sm" style={{ width: 18, height: 18, background: "#fff5b8", border: "2px solid #4b2e73" }} />}
         >
           Keep every building alive when the turn plays out. Lose one and the puzzle is lost.
         </RuleRow>
@@ -915,7 +915,7 @@ function RulesModal({ onClose }) {
           swatch={
             <div
               className="rounded-md flex items-center justify-center"
-              style={{ width: 26, height: 26, background: "#dc2626", color: "#fff", fontSize: 18, fontWeight: 900 }}
+              style={{ width: 26, height: 26, background: "#dc2626", border: "2px solid #4b2e73", color: "#fff", fontSize: 18, fontWeight: 900 }}
             >
               ▲
             </div>
@@ -928,8 +928,8 @@ function RulesModal({ onClose }) {
           title="Threat tiles"
           swatch={
             <div className="flex gap-1">
-              <div style={{ width: 14, height: 14, background: "#7f1d1d", border: "2px solid #ef4444", borderRadius: 2 }} />
-              <div style={{ width: 14, height: 14, background: "#450a0a", border: "1px solid #f87171", borderRadius: 2 }} />
+              <div style={{ width: 14, height: 14, background: "#fecaca", border: "2px solid #ef4444", borderRadius: 2 }} />
+              <div style={{ width: 14, height: 14, background: "#fee2e2", border: "1px solid #f87171", borderRadius: 2 }} />
             </div>
           }
         >
@@ -940,8 +940,8 @@ function RulesModal({ onClose }) {
           title="Enemy collisions"
           swatch={
             <div style={{ position: "relative", width: 30, height: 22 }}>
-              <div className="rounded-full bg-red-500" style={{ position: "absolute", left: 0, top: 3, width: 15, height: 15 }} />
-              <div className="rounded-full bg-red-500" style={{ position: "absolute", right: 0, top: 3, width: 15, height: 15 }} />
+              <div className="rounded-full" style={{ position: "absolute", left: 0, top: 3, width: 15, height: 15, background: "#dc2626", border: "1.5px solid #4b2e73" }} />
+              <div className="rounded-full" style={{ position: "absolute", right: 0, top: 3, width: 15, height: 15, background: "#dc2626", border: "1.5px solid #4b2e73" }} />
               <div
                 style={{
                   position: "absolute",
@@ -952,7 +952,7 @@ function RulesModal({ onClose }) {
                   height: 10,
                   borderRadius: "50%",
                   background: "#fde047",
-                  boxShadow: "0 0 6px 2px rgba(249,115,22,0.85)",
+                  border: "1px solid #4b2e73",
                 }}
               />
             </div>
@@ -964,7 +964,7 @@ function RulesModal({ onClose }) {
         <RuleRow
           title="Pusher"
           swatch={
-            <div className="rounded-md flex items-center justify-center" style={{ width: 26, height: 26, background: "#0d9488", color: "#fff", fontSize: 16, fontWeight: 900 }}>
+            <div className="rounded-md flex items-center justify-center" style={{ width: 26, height: 26, background: "#8ad7d2", border: "2px solid #4b2e73", color: "#4b2e73", fontSize: 16, fontWeight: 900 }}>
               →
             </div>
           }
@@ -975,7 +975,7 @@ function RulesModal({ onClose }) {
         <RuleRow
           title="Puller"
           swatch={
-            <div className="rounded-md flex items-center justify-center" style={{ width: 26, height: 26, background: "#0d9488", color: "#fff" }}>
+            <div className="rounded-md flex items-center justify-center" style={{ width: 26, height: 26, background: "#8ad7d2", border: "2px solid #4b2e73", color: "#4b2e73" }}>
               <Magnet style={{ width: 16, height: 16 }} strokeWidth={2.75} />
             </div>
           }
@@ -986,7 +986,7 @@ function RulesModal({ onClose }) {
         <RuleRow
           title="Blocker"
           swatch={
-            <div className="rounded-md flex items-center justify-center" style={{ width: 26, height: 26, background: "#0d9488", color: "#fff", fontSize: 16, fontWeight: 900 }}>
+            <div className="rounded-md flex items-center justify-center" style={{ width: 26, height: 26, background: "#8ad7d2", border: "2px solid #4b2e73", color: "#4b2e73", fontSize: 16, fontWeight: 900 }}>
               ■
             </div>
           }
@@ -998,11 +998,11 @@ function RulesModal({ onClose }) {
           title="Rotators"
           swatch={
             <div className="flex gap-1">
-              <div className="rounded-md flex items-center justify-center" style={{ width: 26, height: 26, background: "#0d9488", color: "#fff", fontSize: 16, fontWeight: 900 }}>
-                ↻
+              <div className="rounded-md flex items-center justify-center" style={{ width: 26, height: 26, background: "#8ad7d2", border: "2px solid #4b2e73", color: "#4b2e73" }}>
+                <RotateCw className="w-4 h-4" strokeWidth={2.75} />
               </div>
-              <div className="rounded-md flex items-center justify-center" style={{ width: 26, height: 26, background: "#0d9488", color: "#fff", fontSize: 16, fontWeight: 900 }}>
-                ↺
+              <div className="rounded-md flex items-center justify-center" style={{ width: 26, height: 26, background: "#8ad7d2", border: "2px solid #4b2e73", color: "#4b2e73" }}>
+                <RotateCcw className="w-4 h-4" strokeWidth={2.75} />
               </div>
             </div>
           }
@@ -1016,11 +1016,14 @@ function RulesModal({ onClose }) {
             <div className="flex items-center gap-1">
               <div
                 className="rounded-full flex items-center justify-center"
-                style={{ width: 20, height: 20, background: "#1c1917", border: "1.5px solid #5eead4", color: "#5eead4", fontSize: 11, fontWeight: 900 }}
+                style={{ width: 20, height: 20, background: "#ffffff", border: "1.5px solid #4b2e73", color: "#4b2e73", fontSize: 11, fontWeight: 900 }}
               >
                 1
               </div>
-              <div className="rounded-full bg-red-500 flex items-center justify-center text-white" style={{ width: 20, height: 20, fontSize: 11, fontWeight: 900 }}>
+              <div
+                className="rounded-full flex items-center justify-center"
+                style={{ width: 20, height: 20, background: "#dc2626", border: "1.5px solid #4b2e73", color: "#fff", fontSize: 11, fontWeight: 900 }}
+              >
                 1
               </div>
             </div>
@@ -1029,7 +1032,20 @@ function RulesModal({ onClose }) {
           Pieces act in the order you placed them, then enemies fire in numeric order — the number on each red circle is its turn.
         </RuleRow>
 
-        <button type="button" onClick={onClose} className="w-full mt-1 py-2.5 rounded-lg bg-teal-600 text-white font-bold">
+        <button
+          type="button"
+          onClick={onClose}
+          className="w-full mt-1"
+          style={{
+            padding: "10px 0",
+            borderRadius: 12,
+            border: "2.5px solid #4b2e73",
+            background: "#ffb3d0",
+            color: "#4b2e73",
+            fontWeight: 800,
+            fontFamily: "'Baloo 2', system-ui, sans-serif",
+          }}
+        >
           Got it
         </button>
       </div>
@@ -1045,16 +1061,43 @@ function IntroScreen({ onClose, onShowRules }) {
     <div
       style={{ position: "fixed", inset: 0, zIndex: 210, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,0.7)" }}
     >
-      <div className="bg-stone-800 border-2 border-stone-600 rounded-xl p-6 w-full max-w-xs mx-4 text-center" style={{ animation: "popIn 0.25s ease-out" }}>
-        <div className="rounded-sm mx-auto mb-4" style={{ width: 40, height: 40, background: "#f8fafc", boxShadow: "0 1px 2px rgba(0,0,0,0.25)" }} />
-        <p className="text-white font-black mb-2" style={{ fontSize: 20 }}>Save every building</p>
-        <p className="text-stone-300 font-bold text-sm mb-5">
-          Keep all the white squares alive when the turn plays out — that's the only goal.
+      <div
+        className="w-full max-w-xs mx-4 text-center"
+        style={{
+          background: "#ffffff",
+          border: "3px solid #4b2e73",
+          borderRadius: 16,
+          padding: 24,
+          fontFamily: "'Baloo 2', system-ui, sans-serif",
+          animation: "popIn 0.25s ease-out",
+        }}
+      >
+        <div className="rounded-sm mx-auto mb-4" style={{ width: 40, height: 40, background: "#fff5b8", border: "2px solid #4b2e73" }} />
+        <p style={{ color: "#4b2e73", fontWeight: 800, fontSize: 20, marginBottom: 8 }}>Save every building</p>
+        <p style={{ color: "#a07fc4", fontFamily: "'DM Mono', monospace", fontWeight: 700, fontSize: 12, marginBottom: 20 }}>
+          Keep all the yellow squares alive when the turn plays out — that's the only goal.
         </p>
-        <button type="button" onClick={onClose} className="w-full py-2.5 rounded-lg bg-teal-600 text-white font-bold mb-2">
+        <button
+          type="button"
+          onClick={onClose}
+          className="w-full mb-2"
+          style={{
+            padding: "10px 0",
+            borderRadius: 12,
+            border: "2.5px solid #4b2e73",
+            background: "#ffb3d0",
+            color: "#4b2e73",
+            fontWeight: 800,
+          }}
+        >
           Let's go
         </button>
-        <button type="button" onClick={onShowRules} className="w-full py-2 text-stone-400 text-xs font-bold">
+        <button
+          type="button"
+          onClick={onShowRules}
+          className="w-full"
+          style={{ padding: "8px 0", color: "#a07fc4", fontFamily: "'DM Mono', monospace", fontSize: 11, fontWeight: 700 }}
+        >
           See full rules
         </button>
       </div>
@@ -1397,7 +1440,7 @@ function PlayScreen({ level, onBack }) {
 
   function tileClassName(x, y) {
     if (isWall(displayState, x, y)) {
-      return "relative aspect-square flex items-center justify-center rounded-sm border border-stone-800";
+      return "relative aspect-square flex items-center justify-center rounded-sm border border-[#4b2e73]";
     }
     const isValidDrop = drag && drag.validTiles.some((t) => t.x === x && t.y === y);
     const isHover = hoverTile && hoverTile.x === x && hoverTile.y === y;
@@ -1407,19 +1450,19 @@ function PlayScreen({ level, onBack }) {
     // Placing is always legal on any empty tile, so only call out the one
     // tile currently under the finger/cursor while dragging — lighting up
     // every valid tile at once is redundant with that given.
-    if (isValidDrop && isHover) variant = "border-2 border-teal-400 bg-teal-800";
-    else if (!threat) variant = "border border-stone-700 bg-stone-800";
+    if (isValidDrop && isHover) variant = "border-2 border-[#4b2e73] bg-[#c9e9e6]";
+    else if (!threat) variant = "border border-[#e2c7d8] bg-white";
     else if (threat.level === "bold") {
       // A single strong red for any live threat — miss, hit-a-building,
       // hit-a-unit, or beam-on-beam collision — so it's always clearly
       // visible even when the ray doesn't land on anything.
-      variant = "border-2 border-red-500 bg-red-900";
+      variant = "border-2 border-[#ef4444] bg-[#fecaca]";
     } else {
       // light preview — a single pale red, always, regardless of what the
       // post-move ray happens to hit. This keeps it reading as "a future
       // threat" (same hue as the bold danger color) without implying a
       // specific outcome, and it stays visible even on a "miss" trace.
-      variant = "border border-red-400 bg-red-950";
+      variant = "border border-[#f87171] bg-[#fee2e2]";
     }
 
     return `relative aspect-square flex items-center justify-center rounded-sm transition-colors ${variant}`;
@@ -1432,9 +1475,11 @@ function PlayScreen({ level, onBack }) {
     const b = renderState.buildings.find((b) => b.alive && b.x === x && b.y === y);
     const threatLevel = b ? buildingThreatLevel(x, y) : null;
     // The one tile actively getting hit this step (bullet in flight, target
-    // held alive until it lands) reads as an urgent white pulse instead of
-    // the usual red "incoming" warning, which stops applying the instant the
-    // enemy fires.
+    // held alive until it lands) reads as a fast amber pulse — distinct from
+    // and more urgent than the slower red "incoming" warning, which stops
+    // applying the instant the enemy fires. (A white pulse worked on the old
+    // dark board but is invisible against this light one, since the building
+    // is already white — amber pops against both the tile and the building.)
     const isBeingHit = !!(activeKillTarget && activeKillTarget.x === x && activeKillTarget.y === y);
     return (
       <>
@@ -1448,21 +1493,21 @@ function PlayScreen({ level, onBack }) {
               zIndex: 2,
               position: "relative",
               background: isBeingHit
-                ? "#ffffff"
+                ? "#fff5b8"
                 : threatLevel === "bold"
-                ? "linear-gradient(155deg, #fff1f1 0%, #fecaca 100%)"
+                ? "linear-gradient(155deg, #fff5b8 0%, #fecaca 100%)"
                 : threatLevel === "light"
-                ? "linear-gradient(155deg, #f8fafc 0%, #fee2e2 100%)"
-                : "#f8fafc",
+                ? "linear-gradient(155deg, #fff5b8 0%, #fee2e2 100%)"
+                : "#fff5b8",
               boxShadow: isBeingHit
-                ? "0 0 0 2px #ffffff, 0 0 14px 4px rgba(255,255,255,0.9)"
+                ? "0 0 0 3px #fbbf24, 0 0 12px 3px rgba(251,191,36,0.85)"
                 : threatLevel === "bold"
                 ? "0 0 0 2px #ef4444, 0 0 10px 2px rgba(239,68,68,0.55)"
                 : threatLevel === "light"
                 ? "0 0 0 2px rgba(239,68,68,0.5)"
-                : "0 1px 2px rgba(0,0,0,0.25)",
+                : "0 0 0 2px #4b2e73",
               animation: isBeingHit
-                ? "buildingPulseWhite 0.4s ease-in-out infinite"
+                ? "buildingPulseAmber 0.3s ease-in-out infinite"
                 : threatLevel === "bold"
                 ? "buildingPulse 1.4s ease-in-out infinite"
                 : "none",
@@ -1534,28 +1579,51 @@ function PlayScreen({ level, onBack }) {
   }
 
   return (
-    <div className="bg-stone-900 p-6 rounded-xl">
+    <div
+      style={{
+        background: "#ffffff",
+        border: "3px solid #4b2e73",
+        borderRadius: 16,
+        padding: 24,
+        fontFamily: "'Baloo 2', system-ui, sans-serif",
+      }}
+    >
       <div className="max-w-md mx-auto mb-4 relative flex items-center justify-center" style={{ minHeight: 40 }}>
         {onBack && (
           <button
             type="button"
             onClick={onBack}
-            className="shrink-0 p-2 rounded-md border-2 border-stone-600 text-stone-200"
-            style={{ position: "absolute", left: 0 }}
+            className="shrink-0"
+            style={{
+              position: "absolute",
+              left: 0,
+              padding: "6px 10px",
+              borderRadius: 10,
+              border: "2.5px solid #4b2e73",
+              background: "#ffffff",
+              color: "#4b2e73",
+              fontFamily: "'DM Mono', monospace",
+              fontSize: 12,
+              fontWeight: 700,
+            }}
           >
             Menu
           </button>
         )}
         {!onBack && (
           <div
-            className="shrink-0 flex items-center gap-1 rounded-full border-2 border-stone-600 text-stone-200 font-bold"
+            className="shrink-0 flex items-center gap-1"
             style={{
               position: "absolute",
               left: 0,
               height: 32,
               padding: "0 10px",
               fontSize: 13,
-              ...(wonToday ? { borderColor: "#facc15", boxShadow: "0 0 8px 1px rgba(250,204,21,0.55)" } : null),
+              fontWeight: 800,
+              color: "#4b2e73",
+              borderRadius: 999,
+              border: "2.5px solid #4b2e73",
+              background: wonToday ? "#fff5b8" : "#ffffff",
             }}
             title={wonToday ? "Today's puzzle solved" : "Current streak"}
           >
@@ -1563,13 +1631,24 @@ function PlayScreen({ level, onBack }) {
             {headerStreak}
           </div>
         )}
-        <h2 className="text-white font-black tracking-tight text-center" style={{ fontSize: 24 }}>{level.name}</h2>
+        <h2 style={{ fontFamily: "'Baloo 2', system-ui, sans-serif", fontWeight: 800, color: "#4b2e73", letterSpacing: "-.01em", textAlign: "center", fontSize: 24 }}>
+          {level.name}
+        </h2>
         <button
           type="button"
           onClick={() => setShowRules(true)}
           aria-label="How to play"
-          className="shrink-0 flex items-center justify-center rounded-full border-2 border-stone-600 text-stone-200"
-          style={{ position: "absolute", right: 0, width: 32, height: 32 }}
+          className="shrink-0 flex items-center justify-center"
+          style={{
+            position: "absolute",
+            right: 0,
+            width: 32,
+            height: 32,
+            borderRadius: "50%",
+            border: "2.5px solid #4b2e73",
+            background: "#ffffff",
+            color: "#4b2e73",
+          }}
         >
           <Info className="w-4 h-4" />
         </button>
@@ -1622,8 +1701,8 @@ function PlayScreen({ level, onBack }) {
             50% { transform: rotate(-22deg); }
           }
           @keyframes armedGlow {
-            0%, 100% { box-shadow: 0 0 0 3px #2dd4bf, 0 0 8px 2px rgba(45,212,191,0.55); }
-            50% { box-shadow: 0 0 0 3px #2dd4bf, 0 0 16px 5px rgba(45,212,191,0.9); }
+            0%, 100% { box-shadow: 0 0 0 3px #4b2e73, 0 0 8px 2px rgba(13,148,136,0.45); }
+            50% { box-shadow: 0 0 0 3px #4b2e73, 0 0 16px 5px rgba(13,148,136,0.85); }
           }
           @keyframes armedSpinCW { to { transform: rotate(360deg); } }
           @keyframes armedSpinCCW { to { transform: rotate(-360deg); } }
@@ -1631,9 +1710,9 @@ function PlayScreen({ level, onBack }) {
             0%, 100% { box-shadow: 0 0 0 2px #ef4444, 0 0 10px 2px rgba(239,68,68,0.55); }
             50% { box-shadow: 0 0 0 2px #ef4444, 0 0 16px 5px rgba(239,68,68,0.85); }
           }
-          @keyframes buildingPulseWhite {
-            0%, 100% { box-shadow: 0 0 0 2px #ffffff, 0 0 10px 3px rgba(255,255,255,0.75); }
-            50% { box-shadow: 0 0 0 2px #ffffff, 0 0 18px 6px rgba(255,255,255,1); }
+          @keyframes buildingPulseAmber {
+            0%, 100% { box-shadow: 0 0 0 3px #fbbf24, 0 0 10px 3px rgba(251,191,36,0.75); }
+            50% { box-shadow: 0 0 0 3px #fbbf24, 0 0 18px 6px rgba(251,191,36,1); }
           }
           @keyframes beltStripes { to { background-position: -13px 0; } }
           @keyframes enemyFire {
@@ -1657,7 +1736,7 @@ function PlayScreen({ level, onBack }) {
             // One color for every action line — push, pull, and rotate all
             // read as "this unit is about to do something", no need to also
             // encode which action via color.
-            const color = "#2dd4bf";
+            const color = "#0d9488";
             return (
               <g key={i}>
                 <line
@@ -1693,7 +1772,7 @@ function PlayScreen({ level, onBack }) {
               cy={t.y + 0.5}
               r="0.46"
               fill="none"
-              stroke="#2dd4bf"
+              stroke="#0d9488"
               strokeWidth="0.05"
               strokeDasharray="0.16 0.13"
               opacity="0.85"
@@ -1763,7 +1842,7 @@ function PlayScreen({ level, onBack }) {
               cy={flashTile.y + 0.5}
               r="0.36"
               fill="none"
-              stroke="#38bdf8"
+              stroke="#0ea5e9"
               strokeWidth="0.06"
               style={{ transformBox: "fill-box", transformOrigin: "center", animation: "impactRingMove 0.5s ease-out" }}
             />
@@ -1875,11 +1954,13 @@ function PlayScreen({ level, onBack }) {
                 style={{
                   width: "74%",
                   height: "74%",
-                  background: "#0d9488",
-                  color: "#ffffff",
+                  background: "#8ad7d2",
+                  color: "#4b2e73",
+                  border: "2px solid #4b2e73",
+                  boxSizing: "border-box",
                   fontSize: 26,
                   fontWeight: 900,
-                  boxShadow: isActing ? "0 0 0 3px #fbbf24, 0 0 14px 3px rgba(251,191,36,0.7)" : "none",
+                  boxShadow: isActing ? "0 0 0 3px #fbbf24" : "none",
                   animation: !isActing && isArmedRotator ? "armedGlow 1.1s ease-in-out infinite" : "none",
                   transition: "box-shadow 0.25s ease",
                 }}
@@ -1900,9 +1981,9 @@ function PlayScreen({ level, onBack }) {
                     right: "6%",
                     width: 16,
                     height: 16,
-                    background: "#1c1917",
-                    border: "1.5px solid #5eead4",
-                    color: "#5eead4",
+                    background: "#ffffff",
+                    border: "1.5px solid #4b2e73",
+                    color: "#4b2e73",
                     fontSize: 10,
                     fontWeight: 900,
                     lineHeight: 1,
@@ -1919,23 +2000,41 @@ function PlayScreen({ level, onBack }) {
       <div className="mt-4 mx-auto" style={{ width: "100%", maxWidth: 448 }}>
         <div
           data-hand
-          className="flex flex-wrap gap-3 p-3 rounded-lg border-2 border-stone-600 bg-stone-800"
-          style={{ width: "100%", height: 100, overflow: "hidden", boxSizing: "border-box" }}
+          className="flex flex-wrap gap-3 p-3"
+          style={{
+            width: "100%",
+            height: 100,
+            overflow: "hidden",
+            boxSizing: "border-box",
+            borderRadius: 12,
+            border: "2.5px dashed #a07fc4",
+            background: "#fff8fb",
+          }}
         >
           {handUnits.map((unit) => (
             <div key={unit.id} className="flex flex-col items-center gap-1">
               <div
                 onPointerDown={(e) => onUnitPointerDown(e, unit)}
                 className="w-12 h-12 flex items-center justify-center rounded-md cursor-grab active:cursor-grabbing select-none"
-                style={{ touchAction: "none", background: "#0d9488", color: "#ffffff", fontSize: 24, fontWeight: 900 }}
+                style={{
+                  touchAction: "none",
+                  background: "#8ad7d2",
+                  color: "#4b2e73",
+                  border: "2.5px solid #4b2e73",
+                  boxSizing: "border-box",
+                  fontSize: 24,
+                  fontWeight: 900,
+                }}
               >
                 <UnitIcon unit={unit} size={24} inHand />
               </div>
-              <span className="text-stone-300 font-bold" style={{ fontSize: 11 }}>{unit.name}</span>
+              <span style={{ color: "#4b2e73", fontFamily: "'DM Mono', monospace", fontWeight: 700, fontSize: 11 }}>{unit.name}</span>
             </div>
           ))}
           {handUnits.length === 0 && phase === "planning" && (
-            <span className="text-sm text-stone-400 font-bold flex items-center px-2">All pieces played</span>
+            <span style={{ color: "#a07fc4", fontFamily: "'DM Mono', monospace", fontWeight: 700, fontSize: 13 }} className="flex items-center px-2">
+              All pieces played
+            </span>
           )}
         </div>
       </div>
@@ -1947,7 +2046,7 @@ function PlayScreen({ level, onBack }) {
         >
           <div
             className="w-full h-full flex items-center justify-center rounded-md"
-            style={{ background: "#0d9488", color: "#ffffff", fontSize: 26, fontWeight: 900 }}
+            style={{ background: "#8ad7d2", color: "#4b2e73", border: "2.5px solid #4b2e73", boxSizing: "border-box", fontSize: 26, fontWeight: 900 }}
           >
             <UnitIcon unit={draggedUnit} inHand={!draggedUnit.onBoard} />
           </div>
@@ -1959,24 +2058,62 @@ function PlayScreen({ level, onBack }) {
           style={{ position: "fixed", inset: 0, zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,0.6)" }}
         >
           <div
-            className="bg-stone-800 border-2 border-stone-600 rounded-xl p-6 w-full max-w-xs mx-4 text-center"
-            style={{ animation: "popIn 0.25s ease-out" }}
+            className="w-full max-w-xs mx-4 text-center"
+            style={{
+              background: "#ffffff",
+              border: "3px solid #4b2e73",
+              borderRadius: 16,
+              padding: 24,
+              fontFamily: "'Baloo 2', system-ui, sans-serif",
+              animation: "popIn 0.25s ease-out",
+            }}
           >
             {resolution.outcome === "success" ? (
               <>
-                <p className="text-emerald-400 font-black mb-1" style={{ fontSize: 26 }}>Congratulations!</p>
-                <p className="text-stone-300 font-bold text-sm mb-5">{streak === null ? "\u2014" : `${streak} day streak`}</p>
-                {!onBack && <p className="text-stone-500 text-xs font-bold mb-4">Come back tomorrow for the next puzzle.</p>}
+                <p style={{ color: "#16a34a", fontWeight: 800, fontSize: 26, marginBottom: 4 }}>Congratulations!</p>
+                <p style={{ color: "#4b2e73", fontFamily: "'DM Mono', monospace", fontWeight: 700, fontSize: 14, marginBottom: 20 }}>
+                  {streak === null ? "\u2014" : `${streak} day streak`}
+                </p>
+                {!onBack && (
+                  <p style={{ color: "#a07fc4", fontFamily: "'DM Mono', monospace", fontWeight: 700, fontSize: 11, marginBottom: 16 }}>
+                    Come back tomorrow for the next puzzle.
+                  </p>
+                )}
               </>
             ) : (
-              <p className="text-red-400 font-black mb-6" style={{ fontSize: 26 }}>Lost</p>
+              <p style={{ color: "#dc2626", fontWeight: 800, fontSize: 26, marginBottom: 24 }}>Lost</p>
             )}
             <div className="flex gap-2 justify-center">
-              <button type="button" onClick={retryPlan} className="flex-1 py-2.5 rounded-lg bg-teal-600 text-white font-bold flex items-center justify-center gap-1">
+              <button
+                type="button"
+                onClick={retryPlan}
+                className="flex-1 flex items-center justify-center gap-1"
+                style={{
+                  padding: "10px 0",
+                  borderRadius: 12,
+                  border: "2.5px solid #4b2e73",
+                  background: "#ffb3d0",
+                  color: "#4b2e73",
+                  fontWeight: 800,
+                  fontFamily: "'Baloo 2', system-ui, sans-serif",
+                }}
+              >
                 <RotateCcw className="w-5 h-5" /> Reset
               </button>
               {onBack && (
-                <button type="button" onClick={onBack} className="px-4 py-2.5 rounded-lg border-2 border-stone-500 text-stone-200 font-bold">
+                <button
+                  type="button"
+                  onClick={onBack}
+                  style={{
+                    padding: "10px 16px",
+                    borderRadius: 12,
+                    border: "2.5px solid #4b2e73",
+                    background: "#ffffff",
+                    color: "#4b2e73",
+                    fontWeight: 800,
+                    fontFamily: "'Baloo 2', system-ui, sans-serif",
+                  }}
+                >
                   Menu
                 </button>
               )}
@@ -1986,10 +2123,38 @@ function PlayScreen({ level, onBack }) {
       )}
 
       <div className="mt-4 max-w-md mx-auto flex gap-2">
-        <button type="button" onClick={play} disabled={phase !== "planning"} className="flex-1 py-2.5 rounded-lg bg-teal-600 disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold" style={{ fontSize: 16 }}>
+        <button
+          type="button"
+          onClick={play}
+          disabled={phase !== "planning"}
+          className="flex-1 disabled:opacity-40 disabled:cursor-not-allowed"
+          style={{
+            padding: "10px 0",
+            borderRadius: 12,
+            border: "2.5px solid #4b2e73",
+            background: "#ffb3d0",
+            color: "#4b2e73",
+            fontWeight: 800,
+            fontFamily: "'Baloo 2', system-ui, sans-serif",
+            fontSize: 16,
+          }}
+        >
           Play
         </button>
-        <button type="button" onClick={reset} className="px-4 py-2.5 rounded-lg border-2 border-stone-500 text-stone-200 font-bold flex items-center gap-1">
+        <button
+          type="button"
+          onClick={reset}
+          className="flex items-center gap-1"
+          style={{
+            padding: "10px 16px",
+            borderRadius: 12,
+            border: "2.5px solid #4b2e73",
+            background: "#ffffff",
+            color: "#4b2e73",
+            fontWeight: 800,
+            fontFamily: "'Baloo 2', system-ui, sans-serif",
+          }}
+        >
           <RotateCcw className="w-5 h-5" /> Reset
         </button>
       </div>
@@ -2586,35 +2751,27 @@ function ConfigApp() {
 // game. Confluence and Queens 2 are placeholders from that handoff, not real
 // games — their taps are stubs until those games actually exist.
 // ---------------------------------------------------------------------------
-function injectGoogleFont(href) {
-  if (document.querySelector(`link[data-font-href="${href}"]`)) return;
-  const link = document.createElement("link");
-  link.rel = "stylesheet";
-  link.href = href;
-  link.dataset.fontHref = href;
-  document.head.appendChild(link);
-}
-
-function GameCard({ gameNo, chromeColor, squareColors, iconBg, iconRadius, iconInner, name, tagline, streak, streakBg, onPlay }) {
+function GameCard({ gameNo, chromeColor, squareColors, iconBg, iconRadius, iconInner, name, tagline, puzzleNumber, streak, streakBg, onPlay, comingSoon = false }) {
   const [hover, setHover] = useState(false);
   return (
     <button
       type="button"
-      onClick={onPlay}
+      onClick={comingSoon ? undefined : onPlay}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
       style={{
         all: "unset",
-        cursor: "pointer",
+        cursor: comingSoon ? "default" : "pointer",
         display: "block",
         width: "100%",
         boxSizing: "border-box",
         fontFamily: "'Baloo 2', system-ui, sans-serif",
-        transform: hover ? "translate(-2px, -2px)" : "none",
+        opacity: comingSoon ? 0.55 : 1,
+        transform: !comingSoon && hover ? "translate(-2px, -2px)" : "none",
         transition: "transform 0.1s ease",
       }}
     >
-      <div style={{ background: "#ffffff", border: "3px solid #4b2e73", borderRadius: 16, boxShadow: "6px 6px 0 #4b2e73", overflow: "hidden" }}>
+      <div style={{ background: "#ffffff", border: "3px solid #4b2e73", borderRadius: 16, overflow: "hidden" }}>
         <div
           style={{
             display: "flex",
@@ -2646,14 +2803,18 @@ function GameCard({ gameNo, chromeColor, squareColors, iconBg, iconRadius, iconI
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              boxShadow: "3px 3px 0 #4b2e73",
             }}
           >
             {iconInner}
           </div>
           <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 2, textAlign: "left" }}>
             <div style={{ fontSize: 27, fontWeight: 800, color: "#4b2e73", lineHeight: 1.05 }}>{name}</div>
-            <div style={{ fontSize: 13, fontFamily: "'DM Mono', monospace", color: "#a07fc4" }}>{tagline}</div>
+            {tagline && <div style={{ fontSize: 13, fontFamily: "'DM Mono', monospace", color: "#a07fc4" }}>{tagline}</div>}
+            {puzzleNumber != null && (
+              <div style={{ fontSize: 11, fontFamily: "'DM Mono', monospace", fontWeight: 700, color: "#4b2e73", letterSpacing: ".04em" }}>
+                puzzle #{puzzleNumber}
+              </div>
+            )}
           </div>
           <div
             style={{
@@ -2661,16 +2822,26 @@ function GameCard({ gameNo, chromeColor, squareColors, iconBg, iconRadius, iconI
               display: "flex",
               flexDirection: "column",
               alignItems: "center",
+              justifyContent: "center",
               gap: 3,
-              background: streakBg,
+              width: comingSoon ? 44 : undefined,
+              height: comingSoon ? 44 : undefined,
+              background: comingSoon ? "#e5e0e8" : streakBg,
               border: "3px solid #4b2e73",
               borderRadius: 12,
-              padding: "7px 9px",
-              boxShadow: "3px 3px 0 #4b2e73",
+              padding: comingSoon ? 0 : "7px 9px",
+              boxSizing: "border-box",
             }}
           >
-            <div style={{ fontSize: 20, fontWeight: 800, color: "#4b2e73", lineHeight: 1 }}>{streak}</div>
-            <div style={{ fontSize: 9, fontFamily: "'DM Mono', monospace", color: "#4b2e73", letterSpacing: ".12em" }}>DAYS</div>
+            {!comingSoon && (
+              <>
+                <div style={{ fontSize: 18, fontWeight: 800, color: "#4b2e73", lineHeight: 1, display: "flex", alignItems: "center", gap: 3 }}>
+                  <span style={{ fontSize: 13 }}>🔥</span>
+                  {streak}
+                </div>
+                <div style={{ fontSize: 9, fontFamily: "'DM Mono', monospace", color: "#4b2e73", letterSpacing: ".12em" }}>STREAK</div>
+              </>
+            )}
           </div>
         </div>
       </div>
@@ -2679,9 +2850,8 @@ function GameCard({ gameNo, chromeColor, squareColors, iconBg, iconRadius, iconI
 }
 
 function DailyGamesHome() {
-  useEffect(() => {
-    injectGoogleFont("https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700;800&family=DM+Mono:wght@400;500&display=swap");
-  }, []);
+  // Baloo 2 + DM Mono are loaded globally via index.html now (the main game
+  // uses them too), so no per-route font injection is needed here anymore.
 
   // Same puzzle-day convention as the rest of the site (9am Amsterdam
   // rollover), formatted the way the design calls for: "friday, aug 21".
@@ -2689,8 +2859,11 @@ function DailyGamesHome() {
     .toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric", timeZone: "UTC" })
     .toLowerCase();
   // Defender is the real, already-live game — its card shows the player's
-  // actual streak (same source as the in-game header badge), not a mock.
+  // actual streak (same source as the in-game header badge) and today's
+  // puzzle number (same source as the "PUZZLE #N" label in the game itself),
+  // not mocks.
   const defenderStreak = getCurrentStreak();
+  const { dayNumber: defenderPuzzleNumber } = pickDailyLevel(BUILT_IN_LEVELS, LAUNCH_DATE);
 
   return (
     <div
@@ -2710,7 +2883,7 @@ function DailyGamesHome() {
     >
       <div style={{ width: "100%", maxWidth: 430, display: "flex", flexDirection: "column", gap: 26 }}>
         <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 14, paddingTop: 14 }}>
-          <div style={{ position: "relative", background: "#ffffff", border: "3px solid #4b2e73", borderRadius: 14, boxShadow: "5px 5px 0 #4b2e73", overflow: "hidden", width: "100%" }}>
+          <div style={{ position: "relative", background: "#ffffff", border: "3px solid #4b2e73", borderRadius: 14, overflow: "hidden", width: "100%" }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: "#8ad7d2", borderBottom: "3px solid #4b2e73", padding: "7px 10px" }}>
               <div style={{ fontSize: 13, fontWeight: 700, color: "#4b2e73", letterSpacing: ".08em", textTransform: "uppercase", fontFamily: "'DM Mono', monospace" }}>
                 daily.exe
@@ -2738,10 +2911,11 @@ function DailyGamesHome() {
             iconInner={<div style={{ width: 22, height: 22, border: "3px solid #4b2e73", borderRadius: "50%", background: "#fff5b8" }} />}
             name="Defender"
             tagline="protect the buildings"
+            puzzleNumber={defenderPuzzleNumber}
             streak={defenderStreak}
             streakBg="#fff5b8"
             onPlay={() => {
-              window.location.href = "/";
+              window.location.href = "/defenders";
             }}
           />
           <GameCard
@@ -2751,11 +2925,10 @@ function DailyGamesHome() {
             iconBg="#ffb3d0"
             iconRadius={14}
             iconInner={<div style={{ width: 22, height: 22, border: "3px solid #4b2e73", borderRadius: 3, background: "#ffffff", transform: "rotate(45deg)" }} />}
-            name="Queens 2"
-            tagline="one per row, no touching"
-            streak={4}
+            name="Coming Soon"
             streakBg="#8ad7d2"
             onPlay={() => {}}
+            comingSoon
           />
         </div>
 
@@ -2771,32 +2944,46 @@ function DailyGamesHome() {
   );
 }
 
-export default function DailyPuzzleApp() {
-  if (typeof window !== "undefined" && window.location.pathname === "/config") {
-    return <ConfigApp />;
-  }
-  if (typeof window !== "undefined" && window.location.pathname === "/home") {
-    return <DailyGamesHome />;
-  }
+// The actual Defender game — lives at /defenders. dailygiu.com's root is now
+// the ecosystem hub (DailyGamesHome); this used to be what rendered there
+// before the site grew a second (placeholder) game.
+function DefenderApp() {
   const { level, dayNumber } = pickDailyLevel(BUILT_IN_LEVELS, LAUNCH_DATE);
   return (
     <div
       style={{
         height: "100dvh",
         overflow: "hidden",
-        background: "#1c1917",
+        backgroundColor: "#ffe9f3",
+        backgroundImage: "linear-gradient(#ffffff 2px, transparent 2px), linear-gradient(90deg, #ffffff 2px, transparent 2px)",
+        backgroundSize: "36px 36px",
         display: "flex",
         flexDirection: "column",
         alignItems: "center",
         justifyContent: "center",
         paddingTop: 24,
         paddingBottom: 24,
+        fontFamily: "'Baloo 2', system-ui, sans-serif",
       }}
     >
-      <p className="text-stone-500 font-bold text-xs mb-2" style={{ letterSpacing: 1 }}>PUZZLE #{dayNumber}</p>
+      <p
+        style={{ color: "#a07fc4", fontFamily: "'DM Mono', monospace", fontWeight: 700, fontSize: 12, letterSpacing: ".08em", marginBottom: 8 }}
+      >
+        PUZZLE #{dayNumber}
+      </p>
       <div className="w-full max-w-md px-4">
         <PlayScreen level={level} onBack={null} />
       </div>
     </div>
   );
+}
+
+export default function DailyPuzzleApp() {
+  const pathname = typeof window !== "undefined" ? window.location.pathname : "/";
+  if (pathname === "/config") return <ConfigApp />;
+  if (pathname === "/defenders") return <DefenderApp />;
+  // Everything else (the root "/", the old "/home" link, any typo'd path —
+  // GitHub Pages' 404.html fallback routes all of those through this same
+  // app) lands on the ecosystem hub, which is now the actual landing page.
+  return <DailyGamesHome />;
 }
