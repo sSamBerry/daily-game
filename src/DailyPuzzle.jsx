@@ -592,6 +592,43 @@ const BUILT_IN_LEVELS = [
     ],
     conveyors: [],
   },
+  {
+    id: "kyoto",
+    name: "Kyoto",
+    hint: "",
+    date: "2026-08-24",
+    units: [
+      { id: "u-mt5oes1a-ohzgh", name: "Rotator", ability: "rotate_ccw" },
+      { id: "u-mt5ofofi-9as2j", name: "Puller", ability: "pull" },
+      { id: "u-mt5ok9qx-42vvh", name: "Rotator", ability: "rotate" },
+    ],
+    enemies: [
+      { id: "e-mt5oegtr-11ffo", name: "Enemy 1", x: 3, y: 7, dir: { dx: 0, dy: -1 } },
+      { id: "e-mt5oeox1-mj3gm", name: "Enemy 3", x: 0, y: 7, dir: { dx: 0, dy: -1 } },
+      { id: "e-mt5ogihj-4m4yp", name: "Enemy 4", x: 6, y: 1, dir: { dx: -1, dy: 0 } },
+      { id: "e-mt5oi2bk-um6ju", name: "Enemy 4", x: 5, y: 6, dir: { dx: -1, dy: 0 } },
+      { id: "e-mt5ojhzt-wzo85", name: "Enemy 5", x: 0, y: 0, dir: { dx: 0, dy: 1 } },
+    ],
+    buildings: [
+      { id: "b-mt5oeawu-g2y00", name: "Structure 1", x: 3, y: 0 },
+      { id: "b-mt5oeazt-a6cly", name: "Structure 2", x: 4, y: 0 },
+      { id: "b-mt5oeb0q-n9i3l", name: "Structure 3", x: 4, y: 1 },
+      { id: "b-mt5oeb85-ns4hy", name: "Structure 4", x: 3, y: 1 },
+      { id: "b-mt5oendi-cgp5j", name: "Structure 5", x: 0, y: 3 },
+      { id: "b-mt5oha8g-qhquv", name: "Structure 6", x: 1, y: 6 },
+      { id: "b-mt5oi0nl-b7tly", name: "Structure 7", x: 5, y: 0 },
+    ],
+    walls: [
+      { x: 1, y: 0 }, { x: 1, y: 1 }, { x: 1, y: 2 },
+      { x: 6, y: 0 }, { x: 7, y: 0 }, { x: 7, y: 1 }, { x: 7, y: 2 },
+      { x: 4, y: 7 },
+    ],
+    water: [
+      { x: 0, y: 4 }, { x: 1, y: 4 }, { x: 2, y: 4 }, { x: 3, y: 4 }, { x: 4, y: 4 }, { x: 5, y: 4 }, { x: 6, y: 4 }, { x: 7, y: 4 },
+      { x: 7, y: 5 }, { x: 6, y: 5 }, { x: 5, y: 5 }, { x: 4, y: 5 }, { x: 3, y: 5 }, { x: 2, y: 5 }, { x: 1, y: 5 }, { x: 0, y: 5 },
+    ],
+    conveyors: [],
+  },
 ];
 
 // Streak tracking, rewritten for a real browser: Claude's `window.storage`
