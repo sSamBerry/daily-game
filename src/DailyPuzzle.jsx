@@ -2803,6 +2803,7 @@ function ConfigApp() {
   const [screen, setScreen] = useState("list");
   const [editorInitial, setEditorInitial] = useState(null);
   const [activeLevel, setActiveLevel] = useState(null);
+  const [playedFromEdit, setPlayedFromEdit] = useState(false);
 
   // #root is pinned to a fixed height with overflow:hidden (so the drag-driven
   // game itself never scrolls the page) — this screen needs its own explicit
@@ -2823,7 +2824,10 @@ function ConfigApp() {
   if (screen === "play" && activeLevel) {
     return (
       <div style={outerStyle}>
-        <PlayScreen level={activeLevel} onBack={() => setScreen("list")} />
+        <PlayScreen
+          level={activeLevel}
+          onBack={() => setScreen(playedFromEdit ? "edit" : "list")}
+        />
       </div>
     );
   }
@@ -2834,7 +2838,9 @@ function ConfigApp() {
           initialLevel={editorInitial}
           onBack={() => setScreen("list")}
           onTest={(draft) => {
+            setEditorInitial(draft);
             setActiveLevel(draft);
+            setPlayedFromEdit(true);
             setScreen("play");
           }}
         />
@@ -2846,14 +2852,17 @@ function ConfigApp() {
       <PuzzleListScreen
         onEdit={(lvl) => {
           setEditorInitial(clone(lvl));
+          setPlayedFromEdit(false);
           setScreen("edit");
         }}
         onNew={(dateStr) => {
           setEditorInitial({ ...blankLevel(), date: dateStr });
+          setPlayedFromEdit(false);
           setScreen("edit");
         }}
         onPlay={(lvl) => {
           setActiveLevel(lvl);
+          setPlayedFromEdit(false);
           setScreen("play");
         }}
       />
