@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { RotateCcw, RotateCw, Magnet, Hand, Info, X, ArrowLeft, Plus, Trash2, Pencil, Eraser } from "lucide-react";
+import XenoglyphApp, { XENOGLYPH_SIGNALS, XENOGLYPH_LAUNCH_DATE, pickDailySignal, getXenoglyphStreak } from "./Xenoglyph.jsx";
 
 const SIZE = 8;
 
@@ -629,6 +630,69 @@ const BUILT_IN_LEVELS = [
     ],
     conveyors: [],
   },
+  {
+    id: "ohio",
+    name: "Ohio",
+    hint: "",
+    date: "2026-08-25",
+    units: [
+      { id: "u-mt717eqo-bm8gf", name: "Puller", ability: "pull" },
+      { id: "u-mt717h13-53hlj", name: "Rotator", ability: "rotate_ccw" },
+      { id: "u-mt719ef8-jeyv3", name: "Blocker", ability: "block" },
+    ],
+    enemies: [
+      { id: "e-mt716h6d-e3hfu", name: "Enemy 1", x: 1, y: 4, dir: { dx: 0, dy: -1 } },
+      { id: "e-mt716n8g-6eiah", name: "Enemy 3", x: 5, y: 5, dir: { dx: 0, dy: -1 } },
+      { id: "e-mt7170k0-snzls", name: "Enemy 4", x: 1, y: 5, dir: { dx: 0, dy: 1 } },
+      { id: "e-mt717bu1-tj5pt", name: "Enemy 4", x: 6, y: 4, dir: { dx: 0, dy: -1 } },
+      { id: "e-mt7197aa-bo5wt", name: "Enemy 5", x: 3, y: 3, dir: { dx: 0, dy: -1 } },
+      { id: "e-mt719935-e0k1p", name: "Enemy 6", x: 0, y: 2, dir: { dx: 1, dy: 0 } },
+    ],
+    buildings: [
+      { id: "b-mt716y8o-7w7sh", name: "Structure 2", x: 5, y: 1 },
+      { id: "b-mt717219-xlohn", name: "Structure 3", x: 1, y: 6 },
+      { id: "b-mt717d66-ab9a4", name: "Structure 3", x: 6, y: 1 },
+      { id: "b-mt717tfv-u8o23", name: "Structure 4", x: 0, y: 4 },
+      { id: "b-mt718b31-u96wl", name: "Structure 5", x: 0, y: 1 },
+      { id: "b-mt718b85-nx70z", name: "Structure 6", x: 1, y: 1 },
+      { id: "b-mt718b9o-hnpvu", name: "Structure 7", x: 2, y: 1 },
+      { id: "b-mt718bdu-14zhy", name: "Structure 8", x: 3, y: 1 },
+      { id: "b-mt719adf-un67n", name: "Structure 9", x: 7, y: 2 },
+    ],
+    walls: [
+      { x: 0, y: 0 }, { x: 1, y: 0 },
+      { x: 7, y: 7 }, { x: 6, y: 7 }, { x: 5, y: 7 }, { x: 4, y: 7 }, { x: 3, y: 7 }, { x: 2, y: 7 }, { x: 1, y: 7 }, { x: 0, y: 7 },
+      { x: 2, y: 0 }, { x: 3, y: 0 }, { x: 4, y: 0 }, { x: 5, y: 0 }, { x: 6, y: 0 }, { x: 7, y: 0 },
+      { x: 6, y: 5 }, { x: 6, y: 6 },
+      { x: 4, y: 1 }, { x: 7, y: 1 },
+    ],
+    water: [
+      { x: 3, y: 4 }, { x: 4, y: 4 }, { x: 5, y: 3 }, { x: 5, y: 4 }, { x: 4, y: 3 },
+    ],
+    conveyors: [],
+  },
+  {
+    id: "new-level-draft-1",
+    name: "Jetpack",
+    hint: "",
+    date: "2026-08-26",
+    units: [
+      { id: "u-mt7cb3cv-aqveg", name: "Pusher", ability: "push" },
+    ],
+    enemies: [
+      { id: "e-mt7c9nas-cs0da", name: "Enemy 1", x: 0, y: 3, dir: { dx: 1, dy: 0 } },
+      { id: "e-mt7c9qdg-ayua8", name: "Enemy 2", x: 4, y: 3, dir: { dx: 0, dy: 1 } },
+      { id: "e-mt7cgzt2-lwogi", name: "Enemy 4", x: 4, y: 0, dir: { dx: -1, dy: 0 } },
+      { id: "e-mt7ch3gh-60r84", name: "Enemy 4", x: 3, y: 6, dir: { dx: 0, dy: -1 } },
+    ],
+    buildings: [
+      { id: "b-mt7ca2f9-m2mef", name: "Structure 1", x: 4, y: 7 },
+      { id: "b-mt7cci45-nv2qb", name: "Structure 3", x: 7, y: 3 },
+    ],
+    walls: [{ x: 5, y: 0 }],
+    water: [],
+    conveyors: [],
+  },
 ];
 
 // Streak tracking, rewritten for a real browser: Claude's `window.storage`
@@ -642,7 +706,7 @@ const BUILT_IN_LEVELS = [
 // actually changes; keying the streak off UTC date let a player replay the
 // still-showing previous puzzle in that gap and bump their streak twice for
 // what the app considers the same puzzle day.
-function shiftDateStr(dateStr, deltaDays) {
+export function shiftDateStr(dateStr, deltaDays) {
   const d = new Date(dateStr + "T00:00:00Z");
   d.setUTCDate(d.getUTCDate() + deltaDays);
   return d.toISOString().slice(0, 10);
@@ -2241,7 +2305,7 @@ const LAUNCH_DATE = "2026-08-19"; // YYYY-MM-DD calendar date, rolls over per am
 // before 9am local it's still showing the previous calendar day's puzzle.
 // Intl's timeZone support handles CET/CEST (DST) automatically, so this
 // stays correct year-round without a date library.
-function amsterdamPuzzleDateStr() {
+export function amsterdamPuzzleDateStr() {
   const fmt = new Intl.DateTimeFormat("en-US", {
     timeZone: "Europe/Amsterdam",
     year: "numeric",
@@ -2260,7 +2324,7 @@ function amsterdamPuzzleDateStr() {
   return new Date(Date.UTC(y, m - 1, effectiveDay)).toISOString().slice(0, 10);
 }
 
-function dayIndexSince(launchDateStr) {
+export function dayIndexSince(launchDateStr) {
   const start = new Date(launchDateStr + "T00:00:00Z").getTime();
   const today = new Date(amsterdamPuzzleDateStr() + "T00:00:00Z").getTime();
   const diffDays = Math.floor((today - start) / 86400000);
@@ -2398,7 +2462,7 @@ function PuzzleRow({ level, highlight, onEdit, onPlay }) {
 // "next puzzle needed" date — one day after whichever dated puzzle is
 // scheduled furthest out (or today, if none are scheduled ahead) — so it's
 // obvious what to build next without cross-checking the calendar by hand.
-function PuzzleListScreen({ onEdit, onNew, onPlay }) {
+function PuzzleListScreen({ onEdit, onNew, onPlay, onBackToGames }) {
   const dated = BUILT_IN_LEVELS.filter((l) => l.date).slice().sort((a, b) => (a.date < b.date ? -1 : 1));
   const undated = BUILT_IN_LEVELS.filter((l) => !l.date);
   const today = amsterdamPuzzleDateStr();
@@ -2410,7 +2474,17 @@ function PuzzleListScreen({ onEdit, onNew, onPlay }) {
     <div
       style={{ maxWidth: 480, margin: "0 auto", background: "#ffffff", border: "3px solid #4b2e73", borderRadius: 16, padding: 24, fontFamily: "'Baloo 2', system-ui, sans-serif" }}
     >
-      <h2 style={{ color: "#4b2e73", fontWeight: 800, fontSize: 20, marginBottom: 4 }}>Puzzle lab</h2>
+      {onBackToGames && (
+        <button
+          type="button"
+          onClick={onBackToGames}
+          className="flex items-center gap-1 mb-3"
+          style={{ color: "#a07fc4", fontFamily: "'DM Mono', monospace", fontSize: 11, fontWeight: 700, background: "none", border: "none", padding: 0 }}
+        >
+          <ArrowLeft className="w-3.5 h-3.5" /> All games
+        </button>
+      )}
+      <h2 style={{ color: "#4b2e73", fontWeight: 800, fontSize: 20, marginBottom: 4 }}>Defender puzzle lab</h2>
       <p style={{ color: "#a07fc4", fontFamily: "'DM Mono', monospace", fontSize: 12, marginBottom: 16 }}>{BUILT_IN_LEVELS.length} puzzles in this build.</p>
 
       <div className="mb-5 p-3 rounded-lg" style={{ border: "2px solid #4b2e73", background: "#fff5b8" }}>
@@ -2829,6 +2903,109 @@ function PuzzleEditorScreen({ initialLevel, onBack, onTest }) {
   );
 }
 
+// Landing screen inside the puzzle lab once unlocked — picks which game's
+// test tools to open. Defender keeps its existing list/edit/play screens;
+// Xenoglyph gets a simpler "pick any signal, play it" list below, since it
+// has no level editor of its own yet.
+function GameHubScreen({ onSelect }) {
+  const tileStyle = {
+    display: "flex",
+    alignItems: "center",
+    gap: 12,
+    padding: "16px 18px",
+    borderRadius: 14,
+    border: "2.5px solid #4b2e73",
+    background: "#fff8fb",
+    textAlign: "left",
+    width: "100%",
+  };
+  return (
+    <div
+      style={{ maxWidth: 480, margin: "0 auto", background: "#ffffff", border: "3px solid #4b2e73", borderRadius: 16, padding: 24, fontFamily: "'Baloo 2', system-ui, sans-serif" }}
+    >
+      <h2 style={{ color: "#4b2e73", fontWeight: 800, fontSize: 20, marginBottom: 4 }}>Puzzle lab</h2>
+      <p style={{ color: "#a07fc4", fontFamily: "'DM Mono', monospace", fontSize: 12, marginBottom: 16 }}>Pick a game to test.</p>
+      <div className="flex flex-col gap-3">
+        <button type="button" onClick={() => onSelect("defender")} style={tileStyle}>
+          <div style={{ width: 40, height: 40, flex: "none", borderRadius: "50%", border: "3px solid #4b2e73", background: "#8ad7d2", display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <div style={{ width: 16, height: 16, border: "3px solid #4b2e73", borderRadius: "50%", background: "#fff5b8" }} />
+          </div>
+          <div>
+            <p style={{ color: "#4b2e73", fontWeight: 800, fontSize: 16 }}>Defender</p>
+            <p style={{ color: "#a07fc4", fontFamily: "'DM Mono', monospace", fontSize: 11 }}>{BUILT_IN_LEVELS.length} puzzles · has an editor</p>
+          </div>
+        </button>
+        <button type="button" onClick={() => onSelect("xenoglyph")} style={tileStyle}>
+          <div style={{ width: 40, height: 40, flex: "none", borderRadius: 12, border: "3px solid #4b2e73", background: "#f5eefc", display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <span style={{ fontFamily: "'Noto Sans Old North Arabian', 'Baloo 2', serif", fontSize: 20, color: "#4b2e73" }}>
+              {XENOGLYPH_SIGNALS[0].vocabulary[0].glyph}
+            </span>
+          </div>
+          <div>
+            <p style={{ color: "#4b2e73", fontWeight: 800, fontSize: 16 }}>Xenoglyph</p>
+            <p style={{ color: "#a07fc4", fontFamily: "'DM Mono', monospace", fontSize: 11 }}>{XENOGLYPH_SIGNALS.length} signals · pick one to test</p>
+          </div>
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// Xenoglyph has no editor yet — this just lists every signal baked into the
+// build so any of them can be played on demand while testing, regardless of
+// which one today's date would actually pick.
+function XenoglyphSignalListScreen({ onBack, onPlay }) {
+  return (
+    <div
+      style={{ maxWidth: 480, margin: "0 auto", background: "#ffffff", border: "3px solid #4b2e73", borderRadius: 16, padding: 24, fontFamily: "'Baloo 2', system-ui, sans-serif" }}
+    >
+      <button
+        type="button"
+        onClick={onBack}
+        className="flex items-center gap-1 mb-3"
+        style={{ color: "#a07fc4", fontFamily: "'DM Mono', monospace", fontSize: 11, fontWeight: 700, background: "none", border: "none", padding: 0 }}
+      >
+        <ArrowLeft className="w-3.5 h-3.5" /> All games
+      </button>
+      <h2 style={{ color: "#4b2e73", fontWeight: 800, fontSize: 20, marginBottom: 4 }}>Xenoglyph signals</h2>
+      <p style={{ color: "#a07fc4", fontFamily: "'DM Mono', monospace", fontSize: 12, marginBottom: 16 }}>
+        {XENOGLYPH_SIGNALS.length} signals in this build. Playing here never touches your real streak.
+      </p>
+      <div className="space-y-2">
+        {XENOGLYPH_SIGNALS.map((sig, i) => (
+          <div
+            key={sig.id}
+            className="flex items-center justify-between gap-2 rounded-md px-3 py-2"
+            style={{ border: "1.5px solid #e2c7d8", background: "#fff8fb" }}
+          >
+            <div className="min-w-0 flex items-center gap-2">
+              <span style={{ fontFamily: "'Noto Sans Old North Arabian', 'Baloo 2', serif", fontSize: 20, color: "#4b2e73", flex: "none" }}>
+                {sig.vocabulary[0].glyph}
+              </span>
+              <div className="min-w-0">
+                <p className="text-sm truncate" style={{ color: "#4b2e73", fontWeight: 800 }}>
+                  #{i + 1} · {sig.headline}
+                </p>
+                <p className="text-xs truncate" style={{ color: "#a07fc4", fontFamily: "'DM Mono', monospace" }}>
+                  {sig.vocabulary.map((v) => v.meaning).join(", ")}
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => onPlay(sig)}
+              className="px-2 py-1 rounded text-xs shrink-0"
+              style={{ background: "#8ad7d2", border: "1.5px solid #4b2e73", color: "#4b2e73", fontWeight: 800 }}
+            >
+              Play
+            </button>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function ConfigApp() {
   const [unlocked, setUnlocked] = useState(() => {
     try {
@@ -2837,10 +3014,12 @@ function ConfigApp() {
       return false;
     }
   });
+  const [game, setGame] = useState(null); // null | "defender" | "xenoglyph"
   const [screen, setScreen] = useState("list");
   const [editorInitial, setEditorInitial] = useState(null);
   const [activeLevel, setActiveLevel] = useState(null);
   const [playedFromEdit, setPlayedFromEdit] = useState(false);
+  const [xgActiveSignal, setXgActiveSignal] = useState(null);
 
   // #root is pinned to a fixed height with overflow:hidden (so the drag-driven
   // game itself never scrolls the page) — this screen needs its own explicit
@@ -2857,6 +3036,29 @@ function ConfigApp() {
   };
 
   if (!unlocked) return <ConfigGate onUnlock={() => setUnlocked(true)} />;
+
+  if (!game) {
+    return (
+      <div style={outerStyle}>
+        <GameHubScreen onSelect={setGame} />
+      </div>
+    );
+  }
+
+  if (game === "xenoglyph") {
+    if (xgActiveSignal) {
+      return (
+        <div style={outerStyle}>
+          <XenoglyphApp signal={xgActiveSignal} onBack={() => setXgActiveSignal(null)} />
+        </div>
+      );
+    }
+    return (
+      <div style={outerStyle}>
+        <XenoglyphSignalListScreen onBack={() => setGame(null)} onPlay={setXgActiveSignal} />
+      </div>
+    );
+  }
 
   if (screen === "play" && activeLevel) {
     return (
@@ -2902,6 +3104,7 @@ function ConfigApp() {
           setPlayedFromEdit(false);
           setScreen("play");
         }}
+        onBackToGames={() => setGame(null)}
       />
     </div>
   );
@@ -3027,6 +3230,8 @@ function DailyGamesHome() {
   // not mocks.
   const defenderStreak = getCurrentStreak();
   const { dayNumber: defenderPuzzleNumber } = pickDailyLevel(BUILT_IN_LEVELS, LAUNCH_DATE);
+  const xenoglyphStreak = getXenoglyphStreak();
+  const { signalNumber: xenoglyphSignalNumber } = pickDailySignal(XENOGLYPH_SIGNALS, XENOGLYPH_LAUNCH_DATE);
 
   return (
     <div
@@ -3083,15 +3288,23 @@ function DailyGamesHome() {
           />
           <GameCard
             gameNo="02"
-            chromeColor="#c9b6f5"
-            squareColors={["#ffb3d0", "#fff5b8"]}
-            iconBg="#ffb3d0"
+            chromeColor="#8ad7d2"
+            squareColors={["#c9b6f5", "#ffb3d0"]}
+            iconBg="#f5eefc"
             iconRadius={14}
-            iconInner={<div style={{ width: 22, height: 22, border: "3px solid #4b2e73", borderRadius: 3, background: "#ffffff", transform: "rotate(45deg)" }} />}
-            name="Coming Soon"
-            streakBg="#8ad7d2"
-            onPlay={() => {}}
-            comingSoon
+            iconInner={
+              <span style={{ fontFamily: "'Noto Sans Old North Arabian', 'Baloo 2', serif", fontSize: 28, color: "#4b2e73" }}>
+                {XENOGLYPH_SIGNALS[0].vocabulary[0].glyph}
+              </span>
+            }
+            name="Xenoglyph"
+            tagline="decode the signal"
+            puzzleNumber={xenoglyphSignalNumber}
+            streak={xenoglyphStreak}
+            streakBg="#fff5b8"
+            onPlay={() => {
+              window.location.href = "/xenoglyph";
+            }}
           />
         </div>
 
@@ -3145,6 +3358,7 @@ export default function DailyPuzzleApp() {
   const pathname = typeof window !== "undefined" ? window.location.pathname : "/";
   if (pathname === "/config") return <ConfigApp />;
   if (pathname === "/defenders") return <DefenderApp />;
+  if (pathname === "/xenoglyph") return <XenoglyphApp />;
   // Everything else (the root "/", the old "/home" link, any typo'd path —
   // GitHub Pages' 404.html fallback routes all of those through this same
   // app) lands on the ecosystem hub, which is now the actual landing page.
