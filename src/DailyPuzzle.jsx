@@ -3184,26 +3184,7 @@ function DailyGamesHome() {
               window.location.href = "/defenders";
             }}
           />
-          <GameCard
-            gameNo="02"
-            chromeColor="#8ad7d2"
-            squareColors={["#c9b6f5", "#ffb3d0"]}
-            iconBg="#f5eefc"
-            iconRadius={14}
-            iconInner={
-              <span style={{ fontFamily: "'Noto Sans Old North Arabian', 'Baloo 2', serif", fontSize: 28, color: "#4b2e73" }}>
-                {XENOGLYPH_SIGNALS[0].vocabulary[0].glyph}
-              </span>
-            }
-            name="Xenoglyph"
-            tagline="decode the signal"
-            puzzleNumber={xenoglyphSignalNumber}
-            streak={xenoglyphStreak}
-            streakBg="#fff5b8"
-            onPlay={() => {
-              window.location.href = "/xenoglyph";
-            }}
-          />
+          
         </div>
 
         <div style={{ flex: 1 }} />
