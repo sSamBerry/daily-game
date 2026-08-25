@@ -23,14 +23,16 @@ const XENOGLYPH_STREAK_KEY = "xenoglyph_streak";
 const XENOGLYPH_INTRO_KEY = "xenoglyph_seen_intro";
 
 // Every signal is played as 5 transmissions, one at a time: the first 4 are
-// the archive, each 2 glyphs long with its English translation already
-// given. They're arranged in a cycle (word 0 with word 1, word 1 with word
-// 2, word 2 with word 3, word 3 back to word 0) so every glyph appears in
-// exactly two of the four, sharing exactly one English word with each — that
-// shared word is its meaning. No single transmission gives an answer alone,
-// only the cross-reference does. The 5th transmission is the final signal:
-// only 3 of the 4 words appear in it, so the 4th stays live as a decoy, and
-// its meanings aren't given — the player types them in.
+// the archive, each 2 glyphs long with an emoji "scene" hint instead of an
+// English translation — no word is ever spelled out. They're arranged in a
+// cycle (word 0 with word 1, word 1 with word 2, word 2 with word 3, word 3
+// back to word 0) so every glyph appears in exactly two of the four, sharing
+// exactly one meaning-emoji with each. A single card never tells you which
+// of its two glyphs is which emoji — only by comparing two overlapping
+// cards and spotting the one emoji they share can you pin a glyph to a
+// meaning. The 5th transmission is the final signal: only 3 of the 4 words
+// appear in it, so the 4th stays live as a decoy, and its meanings aren't
+// given at all — the player types them in.
 export const XENOGLYPH_SIGNALS = [
   {
     id: "kepler-relay",
@@ -38,16 +40,16 @@ export const XENOGLYPH_SIGNALS = [
     headline: "The Voyager Echo",
     premise: "An old probe drifting past the heliopause just woke up and started transmitting again. Work through its archive, then decode the final signal before it goes quiet.",
     vocabulary: [
-      { id: "sun", glyph: "\u{10a8f}", meaning: "sun" },
-      { id: "cold", glyph: "\u{10a82}", meaning: "cold" },
-      { id: "alive", glyph: "\u{10a9b}", meaning: "alive" },
-      { id: "listen", glyph: "\u{10a8e}", meaning: "listen" },
+      { id: "sun", glyph: "\u{10a8f}", meaning: "sun", emoji: "☀️" },
+      { id: "cold", glyph: "\u{10a82}", meaning: "cold", emoji: "\u{1f9ca}" },
+      { id: "alive", glyph: "\u{10a9b}", meaning: "alive", emoji: "\u{1f493}" },
+      { id: "listen", glyph: "\u{10a8e}", meaning: "listen", emoji: "\u{1f442}" },
     ],
     log: [
-      { glyphs: ["sun", "cold"], text: "The sun feels cold." },
-      { glyphs: ["cold", "alive"], text: "Something cold is alive." },
-      { glyphs: ["alive", "listen"], text: "If alive, listen." },
-      { glyphs: ["listen", "sun"], text: "Listen to the sun." },
+      { glyphs: ["sun", "cold"] },
+      { glyphs: ["cold", "alive"] },
+      { glyphs: ["alive", "listen"] },
+      { glyphs: ["listen", "sun"] },
     ],
     target: { glyphs: ["alive", "listen", "sun"] },
   },
@@ -57,16 +59,16 @@ export const XENOGLYPH_SIGNALS = [
     headline: "Transmission 7x",
     premise: "A burst arrived on an unlisted frequency, labeled only 7x. Work through the archive, then decode the closing line.",
     vocabulary: [
-      { id: "red", glyph: "\u{10a89}", meaning: "red" },
-      { id: "hunger", glyph: "\u{10a97}", meaning: "hunger" },
-      { id: "sky", glyph: "\u{10a90}", meaning: "sky" },
-      { id: "build", glyph: "\u{10a88}", meaning: "build" },
+      { id: "red", glyph: "\u{10a89}", meaning: "red", emoji: "\u{1f534}" },
+      { id: "hunger", glyph: "\u{10a97}", meaning: "hunger", emoji: "\u{1f37d}\u{fe0f}" },
+      { id: "sky", glyph: "\u{10a90}", meaning: "sky", emoji: "\u{2601}\u{fe0f}" },
+      { id: "build", glyph: "\u{10a88}", meaning: "build", emoji: "\u{1f9f1}" },
     ],
     log: [
-      { glyphs: ["red", "hunger"], text: "Red signals hunger." },
-      { glyphs: ["hunger", "sky"], text: "Hunger fills the sky." },
-      { glyphs: ["sky", "build"], text: "We build toward the sky." },
-      { glyphs: ["build", "red"], text: "Red marks what we build." },
+      { glyphs: ["red", "hunger"] },
+      { glyphs: ["hunger", "sky"] },
+      { glyphs: ["sky", "build"] },
+      { glyphs: ["build", "red"] },
     ],
     target: { glyphs: ["hunger", "build", "red"] },
   },
@@ -76,16 +78,16 @@ export const XENOGLYPH_SIGNALS = [
     headline: "The Answer Signal",
     premise: "Something finally answered the message we sent decades ago. Work through the archive, then decode the reply's closing line.",
     vocabulary: [
-      { id: "time", glyph: "\u{10a93}", meaning: "time" },
-      { id: "water", glyph: "\u{10a86}", meaning: "water" },
-      { id: "trust", glyph: "\u{10a83}", meaning: "trust" },
-      { id: "sleep", glyph: "\u{10a94}", meaning: "sleep" },
+      { id: "time", glyph: "\u{10a93}", meaning: "time", emoji: "\u{231b}" },
+      { id: "water", glyph: "\u{10a86}", meaning: "water", emoji: "\u{1f4a7}" },
+      { id: "trust", glyph: "\u{10a83}", meaning: "trust", emoji: "\u{1f91d}" },
+      { id: "sleep", glyph: "\u{10a94}", meaning: "sleep", emoji: "\u{1f634}" },
     ],
     log: [
-      { glyphs: ["time", "water"], text: "Time flows like water." },
-      { glyphs: ["water", "trust"], text: "Water taught us trust." },
-      { glyphs: ["trust", "sleep"], text: "Trust, then sleep." },
-      { glyphs: ["sleep", "time"], text: "Sleep outside of time." },
+      { glyphs: ["time", "water"] },
+      { glyphs: ["water", "trust"] },
+      { glyphs: ["trust", "sleep"] },
+      { glyphs: ["sleep", "time"] },
     ],
     target: { glyphs: ["trust", "sleep", "water"] },
   },
@@ -208,9 +210,14 @@ function ArchiveCard({ entry, byId, order }) {
           </span>
         ))}
       </div>
-      <p style={{ color: "#4b2e73", fontFamily: "'DM Mono', monospace", fontSize: 15, fontStyle: "italic", textAlign: "center", margin: 0, maxWidth: 260 }}>
-        “{entry.text}”
-      </p>
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
+        <span style={{ fontFamily: "'DM Mono', monospace", fontWeight: 700, fontSize: 9.5, letterSpacing: ".08em", color: "#a07fc4", textTransform: "uppercase" }}>
+          scene detected
+        </span>
+        <span style={{ fontSize: 34, lineHeight: 1 }}>
+          {entry.glyphs.map((gid) => byId[gid].emoji).join(" ")}
+        </span>
+      </div>
     </div>
   );
 }
@@ -321,8 +328,8 @@ function RulesModal({ onClose }) {
         <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 18 }}>
           {[
             "You'll get 5 transmissions, one at a time — swipe or use the arrows to move between them.",
-            "The first 4 are already decoded. Every glyph shows up in exactly two of them — the word those two translations share is that glyph's meaning.",
-            "No single transmission gives you an answer alone. Cross-reference the archive to build the vocabulary.",
+            "The first 4 are archived — no English, just a pair of glyphs and an emoji scene. Every glyph shows up in exactly two transmissions.",
+            "A single transmission never tells you which glyph is which emoji. Find the one emoji two overlapping transmissions share — that pins down their common glyph.",
             "The 5th is the final signal — nobody's decoded it yet. Type what you think each glyph means.",
             "Not every word from the archive shows up in the final signal, so watch for decoys.",
           ].map((line, i) => (
