@@ -693,6 +693,57 @@ const BUILT_IN_LEVELS = [
     water: [],
     conveyors: [],
   },
+  {
+    id: "tennessee",
+    name: "Tennessee",
+    hint: "",
+    date: "2026-08-27",
+    units: [
+      { id: "u-mtajxmov-rqqnz", name: "Rotator", ability: "rotate_ccw" },
+      { id: "u-mtajy1dy-81gd8", name: "Blocker", ability: "block" },
+      { id: "u-mtajz5y6-6bf0e", name: "Puller", ability: "pull" },
+    ],
+    enemies: [
+      { id: "e-mtajxdv3-cgg6u", name: "Enemy 1", x: 3, y: 3, dir: { dx: -1, dy: 0 } },
+      { id: "e-mtajxfuu-kdic7", name: "Enemy 2", x: 4, y: 2, dir: { dx: 1, dy: 0 } },
+      { id: "e-mtajxh8m-b6tvt", name: "Enemy 3", x: 4, y: 0, dir: { dx: -1, dy: 0 } },
+      { id: "e-mtajxw5a-tvfnr", name: "Enemy 4", x: 2, y: 7, dir: { dx: 1, dy: 0 } },
+      { id: "e-mtajzs9i-rq7l5", name: "Enemy 5", x: 6, y: 1, dir: { dx: 1, dy: 0 } },
+      { id: "e-mtajzt87-eg4co", name: "Enemy 6", x: 6, y: 3, dir: { dx: 1, dy: 0 } },
+    ],
+    buildings: [
+      { id: "b-mtajxioe-8nfc4", name: "Structure 1", x: 0, y: 3 },
+      { id: "b-mtajxiz2-9bsbr", name: "Structure 2", x: 0, y: 4 },
+      { id: "b-mtajxkqt-4crih", name: "Structure 3", x: 2, y: 0 },
+      { id: "b-mtajy3vb-16yah", name: "Structure 4", x: 7, y: 2 },
+      { id: "b-mtajy51q-i2s3b", name: "Structure 5", x: 7, y: 7 },
+      { id: "b-mtajy74u-ahxyy", name: "Structure 7", x: 0, y: 7 },
+      { id: "b-mtajz3r9-de9sb", name: "Structure 8", x: 7, y: 1 },
+      { id: "b-mtajz411-wc3e0", name: "Structure 9", x: 7, y: 3 },
+    ],
+    walls: [
+      { x: 0, y: 0 },
+      { x: 0, y: 1 },
+      { x: 1, y: 1 },
+      { x: 1, y: 0 },
+      { x: 3, y: 2 },
+      { x: 4, y: 3 },
+      { x: 4, y: 4 },
+      { x: 3, y: 4 },
+      { x: 3, y: 5 },
+    ],
+    water: [
+      { x: 0, y: 6 },
+      { x: 1, y: 6 },
+      { x: 2, y: 6 },
+      { x: 3, y: 6 },
+      { x: 4, y: 6 },
+      { x: 5, y: 6 },
+      { x: 6, y: 6 },
+      { x: 7, y: 6 },
+    ],
+    conveyors: [],
+  },
 ];
 
 // Streak tracking, rewritten for a real browser: Claude's `window.storage`
@@ -1223,6 +1274,15 @@ function IntroScreen({ onClose, onShowRules }) {
   );
 }
 
+function formatElapsed(totalSeconds) {
+  const h = Math.floor(totalSeconds / 3600);
+  const m = Math.floor((totalSeconds % 3600) / 60);
+  const s = totalSeconds % 60;
+  const mm = h > 0 ? String(m).padStart(2, "0") : String(m);
+  const ss = String(s).padStart(2, "0");
+  return h > 0 ? `${h}:${mm}:${ss}` : `${mm}:${ss}`;
+}
+
 function PlayScreen({ level, onBack, isDaily = !onBack }) {
   const [gameState, setGameState] = useState(() => makeGameStateFromLevel(level));
   const [phase, setPhase] = useState("planning");
@@ -1241,7 +1301,14 @@ function PlayScreen({ level, onBack, isDaily = !onBack }) {
   // dead yet — held back until the traveling bullet visually arrives, so a
   // unit/building doesn't vanish before the shot that kills it gets there.
   const [killRevealed, setKillRevealed] = useState(true);
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const [hasSolved, setHasSolved] = useState(false);
   const placementCounterRef = useRef(0);
+  // Timer only accrues while the player is actively planning — it pauses
+  // during the resolve animation and the result modal, and (unlike a plain
+  // stopwatch) never resumes once the puzzle has been solved once.
+  const accumulatedMsRef = useRef(0);
+  const planningStartRef = useRef(Date.now());
 
   useEffect(() => {
     // Only the real daily game greets first-timers — not the level editor's
@@ -1272,7 +1339,35 @@ function PlayScreen({ level, onBack, isDaily = !onBack }) {
     setHeaderStreak(getCurrentStreak());
     setWonToday(hasWonToday());
     placementCounterRef.current = 0;
+    accumulatedMsRef.current = 0;
+    planningStartRef.current = Date.now();
+    setElapsedSeconds(0);
+    setHasSolved(false);
   }, [level]);
+
+  // Whenever the phase flips, either start a fresh planning clock or bank
+  // the time spent planning so far (resolve animation + result modal time
+  // doesn't count).
+  const prevPhaseRef = useRef(phase);
+  useEffect(() => {
+    if (phase === "planning") {
+      planningStartRef.current = Date.now();
+    } else if (prevPhaseRef.current === "planning") {
+      // Only bank time on the transition OUT of planning — later phase
+      // changes (e.g. resolving -> done) must not re-add the same span.
+      accumulatedMsRef.current += Date.now() - planningStartRef.current;
+      setElapsedSeconds(Math.floor(accumulatedMsRef.current / 1000));
+    }
+    prevPhaseRef.current = phase;
+  }, [phase]);
+
+  useEffect(() => {
+    if (phase !== "planning" || hasSolved) return;
+    const t = setInterval(() => {
+      setElapsedSeconds(Math.floor((accumulatedMsRef.current + (Date.now() - planningStartRef.current)) / 1000));
+    }, 1000);
+    return () => clearInterval(t);
+  }, [phase, hasSolved]);
 
   useEffect(() => {
     if (phase !== "resolving" || !resolution) return;
@@ -1312,14 +1407,26 @@ function PlayScreen({ level, onBack, isDaily = !onBack }) {
     }
     const end = ray.tiles[ray.tiles.length - 1];
     setBulletPos({ x: enemy.x, y: enemy.y, animate: false });
-    const raf = requestAnimationFrame(() => {
-      setBulletPos({ x: end.x, y: end.y, animate: true });
+    // A single rAF isn't enough here: it can fire before the browser has
+    // actually painted the snapped (no-transition) position, so the CSS
+    // transition ends up animating from wherever the dot last was (the
+    // previous enemy's shot) instead of snapping first — the double-rAF
+    // guarantees a real paint of the snap lands before we flip animate on.
+    let raf2 = null;
+    const raf1 = requestAnimationFrame(() => {
+      raf2 = requestAnimationFrame(() => {
+        setBulletPos({ x: end.x, y: end.y, animate: true });
+      });
     });
-    return () => cancelAnimationFrame(raf);
+    return () => {
+      cancelAnimationFrame(raf1);
+      if (raf2 !== null) cancelAnimationFrame(raf2);
+    };
   }, [phase, resolution, revealStep]);
 
   useEffect(() => {
     if (phase === "done" && resolution && resolution.outcome === "success") {
+      setHasSolved(true);
       recordWinAndGetStreak().then((s) => {
         setStreak(s);
         setHeaderStreak(s);
@@ -1750,24 +1857,42 @@ function PlayScreen({ level, onBack, isDaily = !onBack }) {
         <h2 style={{ fontFamily: "'Baloo 2', system-ui, sans-serif", fontWeight: 800, color: "#4b2e73", letterSpacing: "-.01em", textAlign: "center", fontSize: 24 }}>
           {level.name}
         </h2>
-        <button
-          type="button"
-          onClick={() => setShowRules(true)}
-          aria-label="How to play"
-          className="shrink-0 flex items-center justify-center"
-          style={{
-            position: "absolute",
-            right: 0,
-            width: 32,
-            height: 32,
-            borderRadius: "50%",
-            border: "2.5px solid #4b2e73",
-            background: "#ffffff",
-            color: "#4b2e73",
-          }}
-        >
-          <Info className="w-4 h-4" />
-        </button>
+        <div className="shrink-0 flex items-center gap-1.5" style={{ position: "absolute", right: 0 }}>
+          <div
+            className="shrink-0 flex items-center justify-center"
+            style={{
+              height: 32,
+              padding: "0 10px",
+              fontSize: 13,
+              fontWeight: 800,
+              color: "#4b2e73",
+              borderRadius: 999,
+              border: "2.5px solid #4b2e73",
+              background: hasSolved ? "#fff5b8" : "#ffffff",
+              fontFamily: "'DM Mono', monospace",
+              fontVariantNumeric: "tabular-nums",
+            }}
+            title={hasSolved ? "Time to solve" : "Time elapsed"}
+          >
+            {formatElapsed(elapsedSeconds)}
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowRules(true)}
+            aria-label="How to play"
+            className="shrink-0 flex items-center justify-center"
+            style={{
+              width: 32,
+              height: 32,
+              borderRadius: "50%",
+              border: "2.5px solid #4b2e73",
+              background: "#ffffff",
+              color: "#4b2e73",
+            }}
+          >
+            <Info className="w-4 h-4" />
+          </button>
+        </div>
       </div>
 
       <div className="relative w-full max-w-md mx-auto" style={{ aspectRatio: "1 / 1" }}>
@@ -2187,6 +2312,9 @@ function PlayScreen({ level, onBack, isDaily = !onBack }) {
             {resolution.outcome === "success" ? (
               <>
                 <p style={{ color: "#16a34a", fontWeight: 800, fontSize: 26, marginBottom: 4 }}>Congratulations!</p>
+                <p style={{ color: "#4b2e73", fontFamily: "'DM Mono', monospace", fontWeight: 700, fontSize: 14, marginBottom: 4 }}>
+                  Solved in {formatElapsed(elapsedSeconds)}
+                </p>
                 <p style={{ color: "#4b2e73", fontFamily: "'DM Mono', monospace", fontWeight: 700, fontSize: 14, marginBottom: 20 }}>
                   {streak === null ? "\u2014" : `${streak} day streak`}
                 </p>
