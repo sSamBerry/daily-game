@@ -1,0 +1,8 @@
+name = "daily-giu-leaderboard"
+main = "src/index.js"
+compatibility_date = "2024-09-23"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "daily-giu-leaderboard"
+database_id = "52cee051-4d47-4944-a958-660852b9cbc3"

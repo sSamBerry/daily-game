@@ -826,6 +826,89 @@ function hasWonToday() {
   }
 }
 
+// Leaderboard: no accounts, just a random per-device id (paired with a
+// player-chosen name) so the same person can update their time without a
+// login. The backend is a small Cloudflare Worker + D1 table — see worker/.
+const LEADERBOARD_API = "https://daily-giu-leaderboard.samberry3522.workers.dev";
+
+function getOrCreateAnonId() {
+  try {
+    let id = localStorage.getItem("puzzlelab_anon_id");
+    if (!id) {
+      id = uid("p");
+      localStorage.setItem("puzzlelab_anon_id", id);
+    }
+    return id;
+  } catch (e) {
+    return "anon-fallback";
+  }
+}
+
+function getNickname() {
+  try {
+    return localStorage.getItem("puzzlelab_nickname") || "";
+  } catch (e) {
+    return "";
+  }
+}
+
+function saveNickname(name) {
+  try {
+    localStorage.setItem("puzzlelab_nickname", name);
+  } catch (e) {
+    // ignore write failure
+  }
+}
+
+// The most recent daily win's solve time, banked here the moment a puzzle is
+// solved (not only when the player taps through to see results) so the time
+// is never lost even if they close the tab before submitting it.
+function saveLastResult(date, timeMs) {
+  try {
+    localStorage.setItem("puzzlelab_last_result", JSON.stringify({ date, timeMs }));
+  } catch (e) {
+    // ignore write failure
+  }
+}
+
+function getLastResult(date) {
+  try {
+    const raw = localStorage.getItem("puzzlelab_last_result");
+    if (!raw) return null;
+    const data = JSON.parse(raw);
+    return data.date === date ? data : null;
+  } catch (e) {
+    return null;
+  }
+}
+
+// Best-effort: a failed submit (offline, worker down) just means the score
+// doesn't show up on the shared board yet — the player's own result and
+// streak are already saved locally regardless.
+async function submitScore(date, timeMs) {
+  try {
+    await fetch(`${LEADERBOARD_API}/api/score`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ date, anonId: getOrCreateAnonId(), name: getNickname(), timeMs }),
+    });
+  } catch (e) {
+    // offline or the worker is unreachable — leaderboard submission is best-effort
+  }
+}
+
+async function fetchLeaderboard(date) {
+  try {
+    const anonId = getOrCreateAnonId();
+    const res = await fetch(`${LEADERBOARD_API}/api/leaderboard?date=${date}&anonId=${encodeURIComponent(anonId)}`);
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data.entries || [];
+  } catch (e) {
+    return null;
+  }
+}
+
 const SLIDE = "left 0.6s ease, top 0.6s ease, opacity 0.4s ease, transform 0.4s ease";
 function dirAngle(dir) {
   if (dir.dx === 1) return 0;
@@ -1283,6 +1366,184 @@ function formatElapsed(totalSeconds) {
   return h > 0 ? `${h}:${mm}:${ss}` : `${mm}:${ss}`;
 }
 
+// Shown once, the first time a player wants to see the leaderboard — asks
+// for the name their times will show under. Saved locally and reused for
+// every future submission, no account involved.
+function NicknamePrompt({ onSave }) {
+  const [value, setValue] = useState("");
+  return (
+    <div
+      style={{ position: "fixed", inset: 0, zIndex: 200, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,0.65)" }}
+    >
+      <div
+        className="w-full max-w-xs mx-4"
+        style={{
+          background: "#ffffff",
+          border: "3px solid #4b2e73",
+          borderRadius: 16,
+          padding: 20,
+          animation: "popIn 0.2s ease-out",
+          fontFamily: "'Baloo 2', system-ui, sans-serif",
+        }}
+      >
+        <h3 style={{ color: "#4b2e73", fontWeight: 800, fontSize: 18, marginBottom: 4 }}>Pick a name</h3>
+        <p style={{ color: "#a07fc4", fontFamily: "'DM Mono', monospace", fontSize: 11, lineHeight: 1.4, marginBottom: 14 }}>
+          This is what shows on the leaderboard next to your time.
+        </p>
+        <input
+          autoFocus
+          value={value}
+          onChange={(e) => setValue(e.target.value.slice(0, 20))}
+          placeholder="Your name"
+          maxLength={20}
+          style={{
+            width: "100%",
+            boxSizing: "border-box",
+            padding: "10px 12px",
+            borderRadius: 12,
+            border: "2.5px solid #4b2e73",
+            fontFamily: "'DM Mono', monospace",
+            fontSize: 14,
+            color: "#4b2e73",
+            marginBottom: 14,
+          }}
+        />
+        <button
+          type="button"
+          disabled={!value.trim()}
+          onClick={() => onSave(value.trim())}
+          className="w-full"
+          style={{
+            padding: "10px 0",
+            borderRadius: 12,
+            border: "2.5px solid #4b2e73",
+            background: value.trim() ? "#ffb3d0" : "#e5e0e8",
+            color: "#4b2e73",
+            fontWeight: 800,
+            fontFamily: "'Baloo 2', system-ui, sans-serif",
+          }}
+        >
+          Save
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// Today's leaderboard for the daily puzzle. Handles the whole "see results"
+// flow on its own: prompt for a name if the player doesn't have one yet,
+// submit whatever the most recent local win for `date` was (idempotent —
+// the worker keeps the best time per player per day), then show the table.
+function ResultsScreen({ date, onBack }) {
+  const [nickname, setNickname] = useState(() => getNickname());
+  const [entries, setEntries] = useState(null);
+  const [loadFailed, setLoadFailed] = useState(false);
+
+  useEffect(() => {
+    if (!nickname) return;
+    let cancelled = false;
+    (async () => {
+      const last = getLastResult(date);
+      if (last) await submitScore(date, last.timeMs);
+      const list = await fetchLeaderboard(date);
+      if (cancelled) return;
+      if (list === null) setLoadFailed(true);
+      else setEntries(list);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [nickname, date]);
+
+  function handleSaveName(name) {
+    saveNickname(name);
+    setNickname(name);
+  }
+
+  const myResult = getLastResult(date);
+
+  return (
+    <div
+      style={{
+        background: "#ffffff",
+        border: "3px solid #4b2e73",
+        borderRadius: 16,
+        padding: 24,
+        fontFamily: "'Baloo 2', system-ui, sans-serif",
+      }}
+    >
+      {!nickname && <NicknamePrompt onSave={handleSaveName} />}
+
+      <h2 style={{ color: "#4b2e73", fontWeight: 800, fontSize: 24, textAlign: "center", letterSpacing: "-.01em", marginBottom: 4 }}>
+        Today's leaderboard
+      </h2>
+      {myResult && (
+        <p style={{ color: "#a07fc4", fontFamily: "'DM Mono', monospace", fontSize: 12, textAlign: "center", marginBottom: 18 }}>
+          You solved it in {formatElapsed(Math.floor(myResult.timeMs / 1000))}
+        </p>
+      )}
+
+      {entries === null && !loadFailed && (
+        <p style={{ color: "#a07fc4", fontFamily: "'DM Mono', monospace", fontSize: 13, textAlign: "center", padding: "20px 0" }}>Loading…</p>
+      )}
+      {loadFailed && (
+        <p style={{ color: "#a07fc4", fontFamily: "'DM Mono', monospace", fontSize: 13, textAlign: "center", padding: "20px 0" }}>
+          Couldn't reach the leaderboard right now — your time is saved locally and your streak still counts.
+        </p>
+      )}
+      {entries !== null && entries.length === 0 && (
+        <p style={{ color: "#a07fc4", fontFamily: "'DM Mono', monospace", fontSize: 13, textAlign: "center", padding: "20px 0" }}>
+          No times submitted yet today — check back soon.
+        </p>
+      )}
+      {entries !== null && entries.length > 0 && (
+        <div className="flex flex-col gap-2" style={{ marginBottom: 8 }}>
+          {entries.map((e) => (
+            <div
+              key={e.rank}
+              className="flex items-center gap-3"
+              style={{
+                padding: "9px 12px",
+                borderRadius: 12,
+                border: `2px solid ${e.isYou ? "#4b2e73" : "#e2c7d8"}`,
+                background: e.isYou ? "#fff5b8" : "#fff8fb",
+              }}
+            >
+              <span style={{ width: 22, textAlign: "center", color: "#4b2e73", fontWeight: 800, fontFamily: "'DM Mono', monospace", fontSize: 13 }}>
+                {e.rank}
+              </span>
+              <span className="flex-1 truncate" style={{ color: "#4b2e73", fontWeight: 700, fontSize: 14 }}>
+                {e.name}
+                {e.isYou ? " (you)" : ""}
+              </span>
+              <span style={{ color: "#4b2e73", fontFamily: "'DM Mono', monospace", fontWeight: 700, fontSize: 13, fontVariantNumeric: "tabular-nums" }}>
+                {formatElapsed(Math.round(e.timeMs / 1000))}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <button
+        type="button"
+        onClick={onBack}
+        className="w-full mt-2"
+        style={{
+          padding: "10px 0",
+          borderRadius: 12,
+          border: "2.5px solid #4b2e73",
+          background: "#ffffff",
+          color: "#4b2e73",
+          fontWeight: 800,
+          fontFamily: "'Baloo 2', system-ui, sans-serif",
+        }}
+      >
+        Back to home
+      </button>
+    </div>
+  );
+}
+
 function PlayScreen({ level, onBack, isDaily = !onBack }) {
   const [gameState, setGameState] = useState(() => makeGameStateFromLevel(level));
   const [phase, setPhase] = useState("planning");
@@ -1303,6 +1564,7 @@ function PlayScreen({ level, onBack, isDaily = !onBack }) {
   const [killRevealed, setKillRevealed] = useState(true);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [hasSolved, setHasSolved] = useState(false);
+  const [screenMode, setScreenMode] = useState("play");
   const placementCounterRef = useRef(0);
   // Timer only accrues while the player is actively planning — it pauses
   // during the resolve animation and the result modal, and (unlike a plain
@@ -1343,6 +1605,7 @@ function PlayScreen({ level, onBack, isDaily = !onBack }) {
     planningStartRef.current = Date.now();
     setElapsedSeconds(0);
     setHasSolved(false);
+    setScreenMode("play");
   }, [level]);
 
   // Whenever the phase flips, either start a fresh planning clock or bank
@@ -1427,6 +1690,7 @@ function PlayScreen({ level, onBack, isDaily = !onBack }) {
   useEffect(() => {
     if (phase === "done" && resolution && resolution.outcome === "success") {
       setHasSolved(true);
+      if (isDaily) saveLastResult(amsterdamPuzzleDateStr(), accumulatedMsRef.current);
       recordWinAndGetStreak().then((s) => {
         setStreak(s);
         setHeaderStreak(s);
@@ -1802,6 +2066,10 @@ function PlayScreen({ level, onBack, isDaily = !onBack }) {
     resolution.actors.forEach((a, i) => {
       if (a && a.type === "unit") unitActionIndexById.set(a.id, i);
     });
+  }
+
+  if (screenMode === "results") {
+    return <ResultsScreen date={amsterdamPuzzleDateStr()} onBack={onBack} />;
   }
 
   return (
@@ -2327,11 +2595,13 @@ function PlayScreen({ level, onBack, isDaily = !onBack }) {
             ) : (
               <p style={{ color: "#dc2626", fontWeight: 800, fontSize: 26, marginBottom: 24 }}>Lost</p>
             )}
-            <div className="flex gap-2 justify-center">
+            {resolution.outcome === "success" && isDaily ? (
+              // A daily win is final for the day — no resetting back into
+              // the same puzzle, the only way forward is the leaderboard.
               <button
                 type="button"
-                onClick={retryPlan}
-                className="flex-1 flex items-center justify-center gap-1"
+                onClick={() => setScreenMode("results")}
+                className="w-full"
                 style={{
                   padding: "10px 0",
                   borderRadius: 12,
@@ -2342,26 +2612,45 @@ function PlayScreen({ level, onBack, isDaily = !onBack }) {
                   fontFamily: "'Baloo 2', system-ui, sans-serif",
                 }}
               >
-                <RotateCcw className="w-5 h-5" /> Reset
+                See results
               </button>
-              {onBack && (
+            ) : (
+              <div className="flex gap-2 justify-center">
                 <button
                   type="button"
-                  onClick={onBack}
+                  onClick={retryPlan}
+                  className="flex-1 flex items-center justify-center gap-1"
                   style={{
-                    padding: "10px 16px",
+                    padding: "10px 0",
                     borderRadius: 12,
                     border: "2.5px solid #4b2e73",
-                    background: "#ffffff",
+                    background: "#ffb3d0",
                     color: "#4b2e73",
                     fontWeight: 800,
                     fontFamily: "'Baloo 2', system-ui, sans-serif",
                   }}
                 >
-                  Menu
+                  <RotateCcw className="w-5 h-5" /> Reset
                 </button>
-              )}
-            </div>
+                {onBack && (
+                  <button
+                    type="button"
+                    onClick={onBack}
+                    style={{
+                      padding: "10px 16px",
+                      borderRadius: 12,
+                      border: "2.5px solid #4b2e73",
+                      background: "#ffffff",
+                      color: "#4b2e73",
+                      fontWeight: 800,
+                      fontFamily: "'Baloo 2', system-ui, sans-serif",
+                    }}
+                  >
+                    Menu
+                  </button>
+                )}
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -3357,6 +3646,7 @@ function DailyGamesHome() {
   // puzzle number (same source as the "PUZZLE #N" label in the game itself),
   // not mocks.
   const defenderStreak = getCurrentStreak();
+  const defenderWonToday = hasWonToday();
   const { dayNumber: defenderPuzzleNumber } = pickDailyLevel(BUILT_IN_LEVELS, LAUNCH_DATE);
 
   return (
@@ -3404,7 +3694,7 @@ function DailyGamesHome() {
             iconRadius="50%"
             iconInner={<div style={{ width: 22, height: 22, border: "3px solid #4b2e73", borderRadius: "50%", background: "#fff5b8" }} />}
             name="Defender"
-            tagline="protect the buildings"
+            tagline={defenderWonToday ? "see today's results" : "protect the buildings"}
             puzzleNumber={defenderPuzzleNumber}
             streak={defenderStreak}
             streakBg="#fff5b8"
@@ -3454,7 +3744,11 @@ function DefenderApp() {
         PUZZLE #{dayNumber}
       </p>
       <div className="w-full max-w-md px-4">
-        <PlayScreen level={level} onBack={() => { window.location.href = "/"; }} isDaily />
+        {hasWonToday() ? (
+          <ResultsScreen date={amsterdamPuzzleDateStr()} onBack={() => { window.location.href = "/"; }} />
+        ) : (
+          <PlayScreen level={level} onBack={() => { window.location.href = "/"; }} isDaily />
+        )}
       </div>
     </div>
   );

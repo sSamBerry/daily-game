@@ -17,6 +17,11 @@ push to `main`.
 level-editor/          ← NOT deployed — a design tool for making new puzzles
   puzzle-lab.jsx        ← full version with the menu + level editor
   README.md             ← how to use it
+
+worker/                 ← the leaderboard backend, deployed separately (see below)
+  src/index.js           ← Cloudflare Worker: POST /api/score, GET /api/leaderboard
+  schema.sql              ← D1 table definition
+  wrangler.toml           ← Worker + D1 binding config
 ```
 
 Netlify only ever builds `src/DailyPuzzle.jsx` (via `npm run build` at the
@@ -128,4 +133,30 @@ system — a player switching devices or clearing browser data loses their
 streak. That's fine for a v1 launch (this is exactly how most daily-puzzle
 games start), but if you want cross-device streaks later, that needs a real
 backend + login, which is a separate, bigger project.
+
+## Leaderboard backend (Cloudflare Worker + D1)
+
+Daily solve times go to a small Cloudflare Worker at
+`daily-giu-leaderboard.samberry3522.workers.dev`, backed by a D1 (SQLite)
+table — this is separate from the GitHub Pages static site and has its own
+deploy step. No login: each player is a random id + a chosen nickname, both
+saved in `localStorage` (see `getOrCreateAnonId` / `getNickname` in
+`src/DailyPuzzle.jsx`).
+
+**To change the Worker's behavior** (e.g. edit `worker/src/index.js` or
+`worker/schema.sql`):
+
+```
+cd worker
+npx wrangler deploy                              # after editing index.js
+npx wrangler d1 execute daily-giu-leaderboard \
+  --remote --file schema.sql                     # after editing schema.sql
+```
+
+This needs `npx wrangler login` once per machine (opens a browser to
+authorize against the Cloudflare account that owns this Worker/D1
+database). The frontend talks to the Worker over plain `fetch()` — no SDK,
+no secrets in the client bundle. There's no anti-cheat: a submitted time is
+trusted as-is, which is an accepted tradeoff for a casual leaderboard like
+this one.
 
