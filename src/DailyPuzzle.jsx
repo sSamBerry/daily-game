@@ -744,6 +744,44 @@ const BUILT_IN_LEVELS = [
     ],
     conveyors: [],
   },
+  {
+    id: "paris",
+    name: "Paris",
+    hint: "",
+    date: "2026-08-28",
+    units: [
+      { id: "u-mtbb3ldj-a3yk2", name: "Pusher", ability: "push" },
+      { id: "u-mtbb3v90-cc4w9", name: "Rotator", ability: "rotate" },
+      { id: "u-mtbb5okv-xthyk", name: "Blocker", ability: "block" },
+    ],
+    enemies: [
+      { id: "e-mtbb300a-qng9r", name: "Enemy 1", x: 1, y: 6, dir: { dx: 0, dy: -1 } },
+      { id: "e-mtbb34nm-rsq2m", name: "Enemy 2", x: 6, y: 5, dir: { dx: 0, dy: -1 } },
+      { id: "e-mtbb5uq0-lj4l1", name: "Enemy 3", x: 4, y: 1, dir: { dx: -1, dy: 0 } },
+      { id: "e-mtbb5w7v-3khiq", name: "Enemy 4", x: 3, y: 7, dir: { dx: 0, dy: -1 } },
+    ],
+    buildings: [
+      { id: "b-mtbb2vnt-jkclu", name: "Structure 1", x: 7, y: 2 },
+      { id: "b-mtbb367k-jgkiv", name: "Structure 2", x: 6, y: 2 },
+      { id: "b-mtbb37l4-mbbzm", name: "Structure 3", x: 1, y: 0 },
+      { id: "b-mtbb38dc-6lqnz", name: "Structure 4", x: 7, y: 6 },
+      { id: "b-mtbb3obi-7c771", name: "Structure 5", x: 5, y: 2 },
+      { id: "b-mtbb3pjf-pmtgi", name: "Structure 6", x: 7, y: 5 },
+      { id: "b-mtbb3r5d-qfsbf", name: "Structure 7", x: 0, y: 5 },
+      { id: "b-mtbb605i-lpm8x", name: "Structure 8", x: 3, y: 0 },
+      { id: "b-mtbb60l9-4nlf4", name: "Structure 9", x: 0, y: 1 },
+    ],
+    walls: [
+      { x: 5, y: 0 }, { x: 5, y: 1 }, { x: 6, y: 1 }, { x: 7, y: 1 }, { x: 7, y: 0 }, { x: 6, y: 0 },
+      { x: 6, y: 6 }, { x: 7, y: 7 }, { x: 6, y: 7 }, { x: 5, y: 7 },
+      { x: 0, y: 0 },
+    ],
+    water: [
+      { x: 6, y: 4 }, { x: 7, y: 4 }, { x: 7, y: 3 }, { x: 6, y: 3 }, { x: 5, y: 3 }, { x: 4, y: 3 }, { x: 3, y: 3 }, { x: 2, y: 3 }, { x: 1, y: 3 }, { x: 0, y: 3 },
+      { x: 0, y: 4 }, { x: 1, y: 4 }, { x: 2, y: 4 }, { x: 3, y: 4 }, { x: 4, y: 4 }, { x: 5, y: 4 },
+    ],
+    conveyors: [],
+  },
 ];
 
 // Streak tracking, rewritten for a real browser: Claude's `window.storage`
@@ -1576,7 +1614,7 @@ function ResultsScreen({ date, onBack }) {
   );
 }
 
-function PlayScreen({ level, onBack, isDaily = !onBack }) {
+function PlayScreen({ level, onBack, isDaily = !onBack, onShowResults }) {
   const [gameState, setGameState] = useState(() => makeGameStateFromLevel(level));
   const [phase, setPhase] = useState("planning");
   const [resolution, setResolution] = useState(null);
@@ -1596,7 +1634,6 @@ function PlayScreen({ level, onBack, isDaily = !onBack }) {
   const [killRevealed, setKillRevealed] = useState(true);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [hasSolved, setHasSolved] = useState(false);
-  const [screenMode, setScreenMode] = useState("play");
   const placementCounterRef = useRef(0);
   // Timer only accrues while the player is actively planning — it pauses
   // during the resolve animation and the result modal, and (unlike a plain
@@ -1642,7 +1679,6 @@ function PlayScreen({ level, onBack, isDaily = !onBack }) {
     planningStartRef.current = Date.now();
     setElapsedSeconds(saved ? Math.floor(saved.accumulatedMs / 1000) : 0);
     setHasSolved(false);
-    setScreenMode("play");
   }, [level]);
 
   // Whenever the phase flips, either start a fresh planning clock or bank
@@ -2117,10 +2153,6 @@ function PlayScreen({ level, onBack, isDaily = !onBack }) {
     resolution.actors.forEach((a, i) => {
       if (a && a.type === "unit") unitActionIndexById.set(a.id, i);
     });
-  }
-
-  if (screenMode === "results") {
-    return <ResultsScreen date={amsterdamPuzzleDateStr()} onBack={onBack} />;
   }
 
   return (
@@ -2651,7 +2683,7 @@ function PlayScreen({ level, onBack, isDaily = !onBack }) {
               // the same puzzle, the only way forward is the leaderboard.
               <button
                 type="button"
-                onClick={() => setScreenMode("results")}
+                onClick={onShowResults}
                 className="w-full"
                 style={{
                   padding: "10px 0",
@@ -3772,18 +3804,23 @@ function DailyGamesHome() {
 // before the site grew a second (placeholder) game.
 function DefenderApp() {
   const { level, dayNumber } = pickDailyLevel(BUILT_IN_LEVELS, LAUNCH_DATE);
+  // The board is a fixed size, so it looks best vertically centered — but
+  // the leaderboard's length varies (and can run longer than the screen),
+  // so once results are showing the page switches to top-aligned +
+  // scrollable instead of centering (and clipping) a growing list.
+  const [showResults, setShowResults] = useState(hasWonToday());
   return (
     <div
       style={{
         height: "100dvh",
-        overflow: "hidden",
+        overflow: showResults ? "auto" : "hidden",
         backgroundColor: "#ffe9f3",
         backgroundImage: "linear-gradient(#ffffff 2px, transparent 2px), linear-gradient(90deg, #ffffff 2px, transparent 2px)",
         backgroundSize: "36px 36px",
         display: "flex",
         flexDirection: "column",
         alignItems: "center",
-        justifyContent: "center",
+        justifyContent: showResults ? "flex-start" : "center",
         paddingTop: 24,
         paddingBottom: 24,
         fontFamily: "'Baloo 2', system-ui, sans-serif",
@@ -3795,10 +3832,15 @@ function DefenderApp() {
         PUZZLE #{dayNumber}
       </p>
       <div className="w-full max-w-md px-4">
-        {hasWonToday() ? (
+        {showResults ? (
           <ResultsScreen date={amsterdamPuzzleDateStr()} onBack={() => { window.location.href = "/"; }} />
         ) : (
-          <PlayScreen level={level} onBack={() => { window.location.href = "/"; }} isDaily />
+          <PlayScreen
+            level={level}
+            onBack={() => { window.location.href = "/"; }}
+            isDaily
+            onShowResults={() => setShowResults(true)}
+          />
         )}
       </div>
     </div>
