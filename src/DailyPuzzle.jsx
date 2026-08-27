@@ -782,6 +782,46 @@ const BUILT_IN_LEVELS = [
     ],
     conveyors: [],
   },
+  {
+    id: "baku",
+    name: "Baku",
+    hint: "",
+    date: "2026-08-29",
+    units: [
+      { id: "u-mtbyaar9-yqyfl", name: "Puller", ability: "pull" },
+      { id: "u-mtbyavo2-77jem", name: "Puller 2", ability: "pull" },
+      { id: "u-mtbyclqk-rc48z", name: "Puller 3", ability: "pull" },
+    ],
+    enemies: [
+      { id: "e-mtby9d7p-cg59j", name: "Enemy 2", x: 6, y: 1, dir: { dx: -1, dy: 0 } },
+      { id: "e-mtby9hd0-c7dcq", name: "Enemy 2", x: 1, y: 6, dir: { dx: 0, dy: -1 } },
+      { id: "e-mtby9ums-9w1sa", name: "Enemy 3", x: 5, y: 6, dir: { dx: 1, dy: 0 } },
+      { id: "e-mtbychh0-6o96c", name: "Enemy 4", x: 3, y: 2, dir: { dx: 0, dy: -1 } },
+    ],
+    buildings: [
+      { id: "b-mtby9bwc-e16kc", name: "Structure 1", x: 1, y: 1 },
+      { id: "b-mtby9kz9-bns3h", name: "Structure 2", x: 6, y: 0 },
+      { id: "b-mtby9lcl-kgdsk", name: "Structure 3", x: 7, y: 1 },
+      { id: "b-mtby9ls4-oisu7", name: "Structure 4", x: 0, y: 6 },
+      { id: "b-mtby9m1x-ydnhy", name: "Structure 5", x: 1, y: 7 },
+      { id: "b-mtbya0qc-iqg0y", name: "Structure 6", x: 6, y: 6 },
+      { id: "b-mtbycikk-8kyzo", name: "Structure 7", x: 3, y: 0 },
+    ],
+    walls: [
+      { x: 1, y: 0 }, { x: 0, y: 0 }, { x: 0, y: 1 },
+      { x: 0, y: 7 }, { x: 6, y: 7 }, { x: 7, y: 7 }, { x: 7, y: 6 }, { x: 7, y: 0 },
+      { x: 0, y: 2 }, { x: 6, y: 2 }, { x: 7, y: 2 },
+    ],
+    water: [
+      { x: 5, y: 2 },
+      { x: 4, y: 3 }, { x: 3, y: 3 }, { x: 2, y: 3 }, { x: 1, y: 3 }, { x: 0, y: 3 },
+      { x: 0, y: 4 }, { x: 0, y: 5 }, { x: 1, y: 4 }, { x: 2, y: 4 }, { x: 3, y: 4 }, { x: 4, y: 4 }, { x: 5, y: 4 }, { x: 6, y: 4 }, { x: 7, y: 4 },
+      { x: 7, y: 5 }, { x: 6, y: 5 }, { x: 5, y: 5 }, { x: 4, y: 5 }, { x: 3, y: 5 }, { x: 2, y: 5 }, { x: 1, y: 5 },
+      { x: 5, y: 3 }, { x: 6, y: 3 }, { x: 7, y: 3 },
+      { x: 3, y: 1 },
+    ],
+    conveyors: [],
+  },
 ];
 
 // Streak tracking, rewritten for a real browser: Claude's `window.storage`
