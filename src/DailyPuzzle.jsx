@@ -909,6 +909,38 @@ async function fetchLeaderboard(date) {
   }
 }
 
+// An in-progress daily attempt (board layout + banked planning time) is
+// saved locally so closing the tab — or the browser tab-discarding a
+// backgrounded page — doesn't lose it. Keyed by date + level id so a saved
+// attempt from a previous day (or a since-changed level) never gets
+// restored by mistake.
+function saveInProgress(date, levelId, gameState, accumulatedMs, placementCounter) {
+  try {
+    localStorage.setItem("puzzlelab_inprogress", JSON.stringify({ date, levelId, gameState, accumulatedMs, placementCounter }));
+  } catch (e) {
+    // ignore write failure — worst case the timer/board just restarts
+  }
+}
+
+function loadInProgress(date, levelId) {
+  try {
+    const raw = localStorage.getItem("puzzlelab_inprogress");
+    if (!raw) return null;
+    const data = JSON.parse(raw);
+    return data.date === date && data.levelId === levelId ? data : null;
+  } catch (e) {
+    return null;
+  }
+}
+
+function clearInProgress() {
+  try {
+    localStorage.removeItem("puzzlelab_inprogress");
+  } catch (e) {
+    // ignore
+  }
+}
+
 const SLIDE = "left 0.6s ease, top 0.6s ease, opacity 0.4s ease, transform 0.4s ease";
 function dirAngle(dir) {
   if (dir.dx === 1) return 0;
@@ -1571,6 +1603,10 @@ function PlayScreen({ level, onBack, isDaily = !onBack }) {
   // stopwatch) never resumes once the puzzle has been solved once.
   const accumulatedMsRef = useRef(0);
   const planningStartRef = useRef(Date.now());
+  const gameStateRef = useRef(gameState);
+  useEffect(() => {
+    gameStateRef.current = gameState;
+  }, [gameState]);
 
   useEffect(() => {
     // Only the real daily game greets first-timers — not the level editor's
@@ -1593,17 +1629,18 @@ function PlayScreen({ level, onBack, isDaily = !onBack }) {
   }
 
   useEffect(() => {
-    setGameState(makeGameStateFromLevel(level));
+    const saved = isDaily ? loadInProgress(amsterdamPuzzleDateStr(), level.id) : null;
+    setGameState(saved ? saved.gameState : makeGameStateFromLevel(level));
     setPhase("planning");
     setResolution(null);
     setRevealStep(0);
     setStreak(null);
     setHeaderStreak(getCurrentStreak());
     setWonToday(hasWonToday());
-    placementCounterRef.current = 0;
-    accumulatedMsRef.current = 0;
+    placementCounterRef.current = saved ? saved.placementCounter : 0;
+    accumulatedMsRef.current = saved ? saved.accumulatedMs : 0;
     planningStartRef.current = Date.now();
-    setElapsedSeconds(0);
+    setElapsedSeconds(saved ? Math.floor(saved.accumulatedMs / 1000) : 0);
     setHasSolved(false);
     setScreenMode("play");
   }, [level]);
@@ -1627,10 +1664,21 @@ function PlayScreen({ level, onBack, isDaily = !onBack }) {
   useEffect(() => {
     if (phase !== "planning" || hasSolved) return;
     const t = setInterval(() => {
-      setElapsedSeconds(Math.floor((accumulatedMsRef.current + (Date.now() - planningStartRef.current)) / 1000));
+      const liveMs = accumulatedMsRef.current + (Date.now() - planningStartRef.current);
+      setElapsedSeconds(Math.floor(liveMs / 1000));
+      if (isDaily) saveInProgress(amsterdamPuzzleDateStr(), level.id, gameStateRef.current, liveMs, placementCounterRef.current);
     }, 1000);
     return () => clearInterval(t);
-  }, [phase, hasSolved]);
+  }, [phase, hasSolved, isDaily, level.id]);
+
+  // Also persist immediately on every board edit (piece placed/moved), so a
+  // tab closed less than a second after the last move doesn't lose it — the
+  // interval above alone only guarantees saving on whole-second boundaries.
+  useEffect(() => {
+    if (!isDaily || phase !== "planning") return;
+    const liveMs = accumulatedMsRef.current + (Date.now() - planningStartRef.current);
+    saveInProgress(amsterdamPuzzleDateStr(), level.id, gameState, liveMs, placementCounterRef.current);
+  }, [gameState, isDaily, phase, level.id]);
 
   useEffect(() => {
     if (phase !== "resolving" || !resolution) return;
@@ -1690,7 +1738,10 @@ function PlayScreen({ level, onBack, isDaily = !onBack }) {
   useEffect(() => {
     if (phase === "done" && resolution && resolution.outcome === "success") {
       setHasSolved(true);
-      if (isDaily) saveLastResult(amsterdamPuzzleDateStr(), accumulatedMsRef.current);
+      if (isDaily) {
+        saveLastResult(amsterdamPuzzleDateStr(), accumulatedMsRef.current);
+        clearInProgress();
+      }
       recordWinAndGetStreak().then((s) => {
         setStreak(s);
         setHeaderStreak(s);
