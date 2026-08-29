@@ -1526,14 +1526,16 @@ function formatElapsed(totalSeconds) {
 // Shown once, the first time a player wants to see the leaderboard — asks
 // for the name their times will show under. Saved locally and reused for
 // every future submission, no account involved.
-function NicknamePrompt({ onSave }) {
-  const [value, setValue] = useState("");
+function NicknamePrompt({ onSave, initial = "", title = "Pick a name", onClose }) {
+  const [value, setValue] = useState(initial);
   return (
     <div
+      onClick={onClose ? () => onClose() : undefined}
       style={{ position: "fixed", inset: 0, zIndex: 200, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,0.65)" }}
     >
       <div
         className="w-full max-w-xs mx-4"
+        onClick={(e) => e.stopPropagation()}
         style={{
           background: "#ffffff",
           border: "3px solid #4b2e73",
@@ -1543,7 +1545,7 @@ function NicknamePrompt({ onSave }) {
           fontFamily: "'Baloo 2', system-ui, sans-serif",
         }}
       >
-        <h3 style={{ color: "#4b2e73", fontWeight: 800, fontSize: 18, marginBottom: 4 }}>Pick a name</h3>
+        <h3 style={{ color: "#4b2e73", fontWeight: 800, fontSize: 18, marginBottom: 4 }}>{title}</h3>
         <p style={{ color: "#a07fc4", fontFamily: "'DM Mono', monospace", fontSize: 11, lineHeight: 1.4, marginBottom: 14 }}>
           This is what shows on the leaderboard next to your time.
         </p>
@@ -3819,6 +3821,12 @@ function DailyGamesHome() {
   const defenderWonToday = hasWonToday();
   const { dayNumber: defenderPuzzleNumber } = pickDailyLevel(BUILT_IN_LEVELS, LAUNCH_DATE);
 
+  // Name shown on the leaderboard lives in localStorage; normally it's only
+  // asked for the first time you open results. This little button lets you
+  // change it from the hub without having to win a puzzle first.
+  const [nickname, setNickname] = useState(() => getNickname());
+  const [editingName, setEditingName] = useState(false);
+
   return (
     <div
       style={{
@@ -3852,8 +3860,53 @@ function DailyGamesHome() {
               <div style={{ fontSize: 38, fontWeight: 800, color: "#4b2e73", lineHeight: 1, letterSpacing: "-.01em" }}>daily games</div>
               <div style={{ fontSize: 13, fontFamily: "'DM Mono', monospace", color: "#a07fc4", letterSpacing: ".06em" }}>{dateLine}</div>
             </div>
+
+            <button
+              type="button"
+              onClick={() => setEditingName(true)}
+              style={{
+                position: "absolute",
+                bottom: 0,
+                right: 0,
+                display: "flex",
+                alignItems: "center",
+                gap: 5,
+                maxWidth: "60%",
+                background: "#ffffff",
+                borderTop: "3px solid #4b2e73",
+                borderLeft: "3px solid #4b2e73",
+                borderRight: "none",
+                borderBottom: "none",
+                borderRadius: "12px 0 0 0",
+                padding: "5px 10px",
+                fontFamily: "'DM Mono', monospace",
+                fontSize: 11,
+                fontWeight: 700,
+                color: "#4b2e73",
+                cursor: "pointer",
+              }}
+            >
+              <span style={{ fontSize: 11 }}>👤</span>
+              <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {nickname || "set name"}
+              </span>
+              <Pencil className="w-3 h-3" style={{ flex: "none" }} />
+            </button>
           </div>
         </div>
+
+        {editingName && (
+          <NicknamePrompt
+            initial={nickname}
+            title={nickname ? "Change your name" : "Pick a name"}
+            onSave={(name) => {
+              saveNickname(name);
+              setNickname(name);
+              setEditingName(false);
+            }}
+            onClose={() => setEditingName(false)}
+          />
+        )}
 
         <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
           <GameCard
