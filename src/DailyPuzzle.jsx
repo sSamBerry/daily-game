@@ -869,6 +869,40 @@ const BUILT_IN_LEVELS = [
     ],
     conveyors: [],
   },
+  {
+    id: "turin",
+    name: "Turin",
+    hint: "",
+    date: "2026-08-31",
+    units: [
+      { id: "u-mtg414e1-vnp15", name: "Blocker", ability: "block" },
+      { id: "u-mtg414sv-g643e", name: "Puller", ability: "pull" },
+    ],
+    enemies: [
+      { id: "e-mtg40vld-vlwcc", name: "Enemy 1", x: 2, y: 5, dir: { dx: 0, dy: -1 } },
+      { id: "e-mtg40wlz-gryww", name: "Enemy 2", x: 5, y: 2, dir: { dx: -1, dy: 0 } },
+      { id: "e-mtg40zm9-x977o", name: "Enemy 3", x: 3, y: 1, dir: { dx: 0, dy: 1 } },
+      { id: "e-mtg411cc-ae4ia", name: "Enemy 4", x: 3, y: 5, dir: { dx: -1, dy: 0 } },
+    ],
+    buildings: [
+      { id: "b-mtg40xxn-ei5s5", name: "Structure 1", x: 1, y: 2 },
+      { id: "b-mtg40ya5-tu5sj", name: "Structure 2", x: 2, y: 1 },
+      { id: "b-mtg41h9y-pvk6b", name: "Structure 3", x: 1, y: 5 },
+      { id: "b-mtg41iny-8y1jt", name: "Structure 4", x: 3, y: 6 },
+      { id: "b-mtg42hg9-1fhkp", name: "Structure 5", x: 6, y: 1 },
+    ],
+    walls: [
+      { x: 0, y: 0 }, { x: 0, y: 1 }, { x: 0, y: 2 }, { x: 0, y: 3 }, { x: 0, y: 4 }, { x: 0, y: 5 }, { x: 0, y: 6 }, { x: 0, y: 7 },
+      { x: 1, y: 7 }, { x: 2, y: 7 }, { x: 7, y: 7 }, { x: 6, y: 7 }, { x: 5, y: 7 }, { x: 4, y: 7 }, { x: 3, y: 7 },
+      { x: 7, y: 6 }, { x: 7, y: 5 }, { x: 7, y: 4 }, { x: 7, y: 3 }, { x: 7, y: 2 }, { x: 7, y: 1 }, { x: 7, y: 0 },
+      { x: 6, y: 0 }, { x: 5, y: 0 }, { x: 4, y: 0 }, { x: 3, y: 0 }, { x: 2, y: 0 }, { x: 1, y: 0 }, { x: 1, y: 1 },
+      { x: 2, y: 6 }, { x: 1, y: 6 }, { x: 6, y: 6 }, { x: 5, y: 6 }, { x: 6, y: 5 }, { x: 5, y: 5 },
+    ],
+    water: [
+      { x: 1, y: 4 }, { x: 2, y: 4 }, { x: 3, y: 4 }, { x: 4, y: 4 }, { x: 5, y: 4 }, { x: 6, y: 4 },
+    ],
+    conveyors: [],
+  },
 ];
 
 // Streak tracking, rewritten for a real browser: Claude's `window.storage`
