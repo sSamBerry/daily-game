@@ -903,6 +903,43 @@ const BUILT_IN_LEVELS = [
     ],
     conveyors: [],
   },
+  {
+    id: "london",
+    name: "London",
+    hint: "",
+    date: "2026-09-01",
+    units: [
+      { id: "u-mtho0dy7-45oko", name: "Pusher", ability: "push" },
+      { id: "u-mtho0e8t-76l2f", name: "Blocker", ability: "block" },
+      { id: "u-mtho11km-9rnkv", name: "Blocker 2", ability: "block" },
+    ],
+    enemies: [
+      { id: "e-mthnzrsz-acl5k", name: "Enemy 2", x: 6, y: 2, dir: { dx: -1, dy: 0 } },
+      { id: "e-mtho0pvd-4d7ei", name: "Enemy 3", x: 4, y: 0, dir: { dx: 0, dy: 1 } },
+      { id: "e-mtho0r3b-54k4s", name: "Enemy 4", x: 7, y: 6, dir: { dx: -1, dy: 0 } },
+      { id: "e-mtho0ucw-fm1zq", name: "Enemy 5", x: 3, y: 6, dir: { dx: 1, dy: 0 } },
+      { id: "e-mtho1tlw-o7ih5", name: "Enemy 5", x: 1, y: 6, dir: { dx: 0, dy: -1 } },
+    ],
+    buildings: [
+      { id: "b-mthnzykh-2rssk", name: "Structure 1", x: 0, y: 1 },
+      { id: "b-mthnzyv5-iwa14", name: "Structure 2", x: 1, y: 0 },
+      { id: "b-mtho082m-xii70", name: "Structure 3", x: 5, y: 2 },
+      { id: "b-mtho0x0b-cwxhv", name: "Structure 4", x: 4, y: 7 },
+      { id: "b-mtho2chh-s1rz3", name: "Structure 6", x: 0, y: 2 },
+      { id: "b-mtho2j3g-7cdcf", name: "Structure 7", x: 0, y: 5 },
+      { id: "b-mtho2r1l-xo8ze", name: "Structure 7", x: 5, y: 3 },
+    ],
+    walls: [
+      { x: 2, y: 6 }, { x: 2, y: 5 }, { x: 2, y: 4 }, { x: 2, y: 3 }, { x: 2, y: 2 },
+      { x: 3, y: 7 }, { x: 2, y: 7 }, { x: 1, y: 7 }, { x: 0, y: 7 }, { x: 0, y: 6 },
+      { x: 5, y: 7 }, { x: 6, y: 7 }, { x: 7, y: 7 }, { x: 0, y: 0 },
+      { x: 6, y: 4 }, { x: 7, y: 4 }, { x: 7, y: 5 }, { x: 6, y: 5 }, { x: 3, y: 3 },
+    ],
+    water: [
+      { x: 5, y: 4 }, { x: 4, y: 4 }, { x: 3, y: 4 }, { x: 3, y: 5 }, { x: 4, y: 5 }, { x: 5, y: 5 },
+    ],
+    conveyors: [],
+  },
 ];
 
 // Streak tracking, rewritten for a real browser: Claude's `window.storage`
