@@ -127,9 +127,17 @@ function ringKeep(x0, y0, x1, y1, keep) {
   return ringPath(x0, y0, x1, y1).filter((_, i) => keep(i));
 }
 
-// A scattered puzzle: a few fence bits sitting at chosen points around an
+// `count` roughly-evenly-spaced indices around a ring of `len` cells.
+function spread(len, count) {
+  const out = [];
+  for (let i = 0; i < count; i++) out.push(Math.round((i * len) / count) % len);
+  return out;
+}
+
+// A scattered puzzle: some fence bits sitting at chosen points around an
 // (invisible) pen outline `rect`, plus loose decoy posts off it. The player
 // joins them into a closed pen — there's never most of a box already built.
+// `keepIdx` is a list of ring indices to pre-place (see `spread`).
 function scatterPuzzle(id, name, date, rect, keepIdx, decoys, sheep, budget) {
   const keep = new Set(keepIdx);
   const [x0, y0, x1, y1] = rect;
@@ -163,26 +171,36 @@ const ROTATION = [
 // and re-publishable from /config like Defender's dated levels — a puzzle
 // published to the backend for one of these dates overrides the entry here.
 const SCHEDULED = [
+  // small-ish centred pen, a normal handful of posts
   scatterPuzzle("sheep-2026-09-03", "Handful", "2026-09-03",
-    [3, 3, 8, 8], [0, 3, 7, 10, 13, 17], [P(1, 7)], P(6, 6), 16),
-  scatterPuzzle("sheep-2026-09-04", "Loose Ends", "2026-09-04",
-    [2, 3, 8, 8], [0, 4, 8, 11, 15, 19], [P(10, 2), P(2, 10)], P(5, 5), 16),
-  scatterPuzzle("sheep-2026-09-05", "Odd Posts", "2026-09-05",
-    [3, 3, 9, 8], [1, 5, 9, 12, 16, 20], [P(2, 10)], P(6, 5), 16),
-  scatterPuzzle("sheep-2026-09-06", "Scattergun", "2026-09-06",
-    [3, 3, 8, 8], [2, 5, 8, 11, 14, 17], [P(1, 4), P(10, 8)], P(6, 6), 16),
-  scatterPuzzle("sheep-2026-09-07", "Sparse", "2026-09-07",
-    [4, 4, 8, 8], [0, 4, 8, 12], [P(2, 6), P(9, 3)], P(6, 6), 16),
-  scatterPuzzle("sheep-2026-09-08", "Drift", "2026-09-08",
-    [2, 4, 8, 9], [0, 4, 8, 12, 16, 20], [P(5, 1)], P(5, 6), 16),
+    [3, 3, 8, 8], spread(20, 6), [P(1, 7)], P(5, 6), 15),
+  // big open field, only three fence bits — mostly a free build
+  scatterPuzzle("sheep-2026-09-04", "Bare Field", "2026-09-04",
+    [2, 2, 9, 9], spread(28, 3), [P(0, 4)], P(6, 6), 26),
+  // tight pen tucked into the bottom-right, sheep down there too
+  scatterPuzzle("sheep-2026-09-05", "Nook", "2026-09-05",
+    [5, 5, 9, 9], spread(16, 4), [P(3, 7)], P(7, 7), 12),
+  // pen up in the top-left corner
+  scatterPuzzle("sheep-2026-09-06", "Top Corner", "2026-09-06",
+    [2, 1, 7, 6], spread(20, 7), [P(4, 8), P(9, 2)], P(4, 3), 14),
+  // wide low pen, lots of ground to cover
+  scatterPuzzle("sheep-2026-09-07", "Sprawl", "2026-09-07",
+    [1, 3, 10, 9], spread(30, 14), [P(5, 1)], P(5, 6), 18),
+  // small pen low-left
+  scatterPuzzle("sheep-2026-09-08", "Pocket", "2026-09-08",
+    [2, 6, 6, 10], spread(16, 3), [P(4, 4), P(8, 8)], P(4, 8), 13),
+  // dense confetti of posts, tight budget
   scatterPuzzle("sheep-2026-09-09", "Confetti", "2026-09-09",
-    [3, 3, 8, 8], [1, 4, 7, 10, 13, 16], [P(1, 1), P(10, 10), P(1, 10)], P(6, 6), 16),
-  scatterPuzzle("sheep-2026-09-10", "Four Marks", "2026-09-10",
-    [4, 3, 9, 8], [0, 5, 10, 15], [P(2, 5), P(11, 6)], P(6, 5), 16),
-  scatterPuzzle("sheep-2026-09-11", "Wide Scatter", "2026-09-11",
-    [2, 4, 9, 8], [0, 4, 8, 11, 15, 19], [P(5, 10)], P(5, 6), 16),
-  scatterPuzzle("sheep-2026-09-12", "Almost Bare", "2026-09-12",
-    [4, 4, 8, 8], [0, 6, 11], [P(2, 2), P(10, 10)], P(6, 6), 16),
+    [3, 3, 8, 8], spread(20, 9), [P(1, 1), P(10, 10), P(1, 10)], P(6, 6), 13),
+  // tall pen hugging the right edge
+  scatterPuzzle("sheep-2026-09-10", "Right Field", "2026-09-10",
+    [5, 2, 10, 9], spread(24, 8), [P(3, 5)], P(7, 6), 18),
+  // almost nothing given — two posts, tiny centred pen
+  scatterPuzzle("sheep-2026-09-11", "Two Bits", "2026-09-11",
+    [4, 4, 8, 8], [2, 10], [P(2, 2), P(10, 7)], P(6, 6), 15),
+  // the whole board is the pen — biggest score, most posts to start
+  scatterPuzzle("sheep-2026-09-12", "Wide Open", "2026-09-12",
+    [1, 1, 10, 10], spread(36, 20), [P(0, 5)], P(5, 5), 18),
 ];
 
 export const SHEEP_LEVELS = [...SCHEDULED, ...ROTATION];
