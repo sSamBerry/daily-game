@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { ArrowLeft, Plus, Pencil, RotateCcw, Info, X } from "lucide-react";
 import {
   clone,
@@ -366,10 +366,42 @@ const ghostBtn = { ...primaryBtn, background: "#ffffff" };
 
 // --- Board renderer ------------------------------------------------------
 
-function SheepBoard({ walls, placed, sheep, highlight, onTapCell }) {
+// `onTapCell` — click to toggle (play screen). `onPaintCell` — press-and-drag
+// to paint the same cell action across every square the pointer crosses
+// (the /config editor); it fires on pointerdown and again each time the drag
+// enters a new cell.
+function SheepBoard({ walls, placed, sheep, highlight, onTapCell, onPaintCell }) {
   const wallSet = useMemo(() => new Set(walls.map((w) => key(w.x, w.y))), [walls]);
   const placedSet = useMemo(() => new Set((placed || []).map((w) => key(w.x, w.y))), [placed]);
   const hiSet = highlight ? new Set(highlight) : null;
+
+  const paintingRef = useRef(false);
+  const lastKeyRef = useRef(null);
+  useEffect(() => {
+    if (!onPaintCell) return;
+    function onMove(e) {
+      if (!paintingRef.current) return;
+      const el = document.elementFromPoint(e.clientX, e.clientY);
+      const cell = el && el.closest("[data-sheep-cell]");
+      if (!cell) return;
+      const x = Number(cell.dataset.x);
+      const y = Number(cell.dataset.y);
+      const k = key(x, y);
+      if (k === lastKeyRef.current) return;
+      lastKeyRef.current = k;
+      onPaintCell(x, y);
+    }
+    function onUp() {
+      paintingRef.current = false;
+      lastKeyRef.current = null;
+    }
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    return () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+    };
+  }, [onPaintCell]);
 
   const cells = [];
   for (let y = 0; y < SHEEP_SIZE; y++) for (let x = 0; x < SHEEP_SIZE; x++) cells.push({ x, y });
@@ -407,9 +439,20 @@ function SheepBoard({ walls, placed, sheep, highlight, onTapCell }) {
           <button
             key={k}
             type="button"
+            data-sheep-cell
             data-x={x}
             data-y={y}
             onClick={onTapCell ? () => onTapCell(x, y) : undefined}
+            onPointerDown={
+              onPaintCell
+                ? (e) => {
+                    e.preventDefault();
+                    paintingRef.current = true;
+                    lastKeyRef.current = k;
+                    onPaintCell(x, y);
+                  }
+                : undefined
+            }
             style={{
               position: "relative",
               border: "none",
@@ -418,8 +461,9 @@ function SheepBoard({ walls, placed, sheep, highlight, onTapCell }) {
               borderRadius: 3,
               background: bg,
               boxShadow: isPlaced ? "inset 0 0 0 2px #4b2e73" : "none",
-              cursor: onTapCell ? "pointer" : "default",
+              cursor: onTapCell || onPaintCell ? "pointer" : "default",
               overflow: "hidden",
+              touchAction: "none",
             }}
           >
             {isSheep && (
@@ -1252,29 +1296,30 @@ function SheepEditorScreen({ initialLevel, onBack, onTest }) {
   const [publishStatus, setPublishStatus] = useState("idle");
   const [publishError, setPublishError] = useState("");
 
-  function tapCell(x, y) {
-    setDraft((prev) => {
-      const next = clone(prev);
-      const atSheep = next.sheep.x === x && next.sheep.y === y;
-      if (tool === "sheep") {
-        next.sheep = { x, y };
-        next.walls = next.walls.filter((w) => !(w.x === x && w.y === y));
+  // Press-and-drag paints. Wall/Eraser are additive/subtractive (so a drag
+  // lays or clears a run of fence); switch to Eraser to take single walls
+  // back out. Sheep just follows to wherever you release.
+  const paint = useCallback(
+    (x, y) => {
+      setDraft((prev) => {
+        const next = clone(prev);
+        if (tool === "sheep") {
+          next.sheep = { x, y };
+          next.walls = next.walls.filter((w) => !(w.x === x && w.y === y));
+          return next;
+        }
+        if (tool === "eraser") {
+          next.walls = next.walls.filter((w) => !(w.x === x && w.y === y));
+          return next;
+        }
+        // wall — additive
+        if (next.sheep.x === x && next.sheep.y === y) return prev;
+        if (!next.walls.some((w) => w.x === x && w.y === y)) next.walls.push({ x, y });
         return next;
-      }
-      if (tool === "eraser") {
-        next.walls = next.walls.filter((w) => !(w.x === x && w.y === y));
-        return next;
-      }
-      // wall
-      if (atSheep) return prev;
-      if (next.walls.some((w) => w.x === x && w.y === y)) {
-        next.walls = next.walls.filter((w) => !(w.x === x && w.y === y));
-      } else {
-        next.walls.push({ x, y });
-      }
-      return next;
-    });
-  }
+      });
+    },
+    [tool]
+  );
 
   async function handleCopyJson() {
     try {
@@ -1372,10 +1417,10 @@ function SheepEditorScreen({ initialLevel, onBack, onTest }) {
         {toolBtn("eraser", "Eraser")}
       </div>
       <p className="mb-2" style={{ color: "#a07fc4", fontFamily: MONO, fontSize: 11 }}>
-        {draft.walls.length} preset walls placed.
+        Press and drag to paint. {draft.walls.length} preset wall{draft.walls.length === 1 ? "" : "s"} placed.
       </p>
 
-      <SheepBoard walls={draft.walls} placed={[]} sheep={draft.sheep} onTapCell={tapCell} />
+      <SheepBoard walls={draft.walls} placed={[]} sheep={draft.sheep} onPaintCell={paint} />
 
       <div className="mt-4 flex gap-2">
         <button type="button" onClick={() => onTest(draft)} className="flex-1" style={primaryBtn}>
