@@ -1152,10 +1152,14 @@ function SheepPuzzleListScreen({ onEdit, onNew, onPlay, onBackToGames }) {
     };
   }, [reloadKey]);
 
-  const dated = SHEEP_LEVELS.filter((l) => l.date).slice().sort((a, b) => (a.date < b.date ? -1 : 1));
   const undated = SHEEP_LEVELS.filter((l) => !l.date);
-  const builtInDates = new Set(dated.map((l) => l.date));
+  const builtInDated = SHEEP_LEVELS.filter((l) => l.date).slice().sort((a, b) => (a.date < b.date ? -1 : 1));
+  const builtInDates = new Set(builtInDated.map((l) => l.date));
   const liveDates = new Set(published.map((p) => p.date));
+  const pubByDate = new Map(published.map((p) => [p.date, p]));
+  // For a dated row, show the published override when there is one — so an
+  // edit/publish is what you see and edit here, not the stale built-in.
+  const dated = builtInDated.map((l) => pubByDate.get(l.date) || l);
   const remoteOnly = published
     .filter((p) => !builtInDates.has(p.date))
     .slice()
