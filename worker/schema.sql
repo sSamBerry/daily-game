@@ -8,3 +8,15 @@ CREATE TABLE IF NOT EXISTS scores (
 );
 
 CREATE INDEX IF NOT EXISTS idx_scores_date_time ON scores (date, time_ms);
+
+-- Puzzles published straight from the /config puzzle lab (no code push). The
+-- live game fetches these on load; a row here for a given date overrides the
+-- built-in puzzle that date would otherwise show. `data` is JSON.stringify of
+-- the level object (same shape as BUILT_IN_LEVELS entries in DailyPuzzle.jsx).
+CREATE TABLE IF NOT EXISTS puzzles (
+  game       TEXT NOT NULL DEFAULT 'defender',
+  date       TEXT NOT NULL,
+  data       TEXT NOT NULL,
+  updated_at INTEGER NOT NULL,
+  PRIMARY KEY (game, date)
+);

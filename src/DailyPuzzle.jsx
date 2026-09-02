@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { RotateCcw, RotateCw, Magnet, Hand, Info, X, ArrowLeft, Plus, Trash2, Pencil, Eraser } from "lucide-react";
 import XenoglyphApp, { XENOGLYPH_SIGNALS } from "./Xenoglyph.jsx";
+import SluiceApp, { SLUICE_LEVELS } from "./Sluice.jsx";
 
 const SIZE = 8;
 
@@ -15,6 +16,16 @@ function uid(prefix) {
 }
 function blankLevel() {
   return { id: null, name: "New level", hint: "", date: "", units: [], enemies: [], buildings: [], walls: [], water: [], conveyors: [] };
+}
+
+// Overlay puzzles published from /config onto the built-in list: a published
+// puzzle for a given date replaces any built-in with the same date, and
+// published puzzles for brand-new dates are just added. Undated built-in
+// (rotation) puzzles are always kept. `pickDailyLevel` then applies its usual
+// "dated puzzle for today wins, else cycle the undated list" rule.
+function mergeLevels(builtIn, published) {
+  const pubDates = new Set((published || []).map((p) => p.date));
+  return [...builtIn.filter((l) => !l.date || !pubDates.has(l.date)), ...(published || [])];
 }
 function isWall(state, x, y) {
   return state.walls.some((w) => w.x === x && w.y === y);
@@ -1141,6 +1152,49 @@ async function fetchLeaderboard(date) {
   } catch (e) {
     return null;
   }
+}
+
+// --- Published puzzles -------------------------------------------------------
+//
+// Puzzles authored in /config can be pushed straight to the Worker (D1) with
+// no code deploy. The live game fetches them on load; a published puzzle for a
+// given date overrides the built-in puzzle that date would otherwise show.
+// Writes are gated by the same shared password as /config (CONFIG_PASSWORD) —
+// casual-write protection, not real auth, and it's already in this bundle.
+
+// Fetch every published puzzle for a game. Rejects (rather than returning [])
+// on network/HTTP failure so the caller can tell "backend down" from
+// "nothing published yet".
+async function fetchPublishedPuzzles(game = "defender") {
+  const res = await fetch(`${LEADERBOARD_API}/api/puzzles?game=${encodeURIComponent(game)}`);
+  if (!res.ok) throw new Error(`puzzles fetch failed: ${res.status}`);
+  const data = await res.json();
+  return (data.puzzles || []).map((row) => {
+    const level = JSON.parse(row.data);
+    return { ...level, date: row.date, id: level.id || `pub-${row.date}` };
+  });
+}
+
+async function publishPuzzle(level, password, game = "defender") {
+  const res = await fetch(`${LEADERBOARD_API}/api/puzzles`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ game, date: level.date, password, level }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || `publish failed: ${res.status}`);
+  return data;
+}
+
+async function unpublishPuzzle(date, password, game = "defender") {
+  const res = await fetch(`${LEADERBOARD_API}/api/puzzles/delete`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ game, date, password }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || `unpublish failed: ${res.status}`);
+  return data;
 }
 
 // An in-progress daily attempt (board layout + banked planning time) is
@@ -3052,6 +3106,18 @@ function pickDailyLevel(levels, launchDateStr) {
 // ---------------------------------------------------------------------------
 const CONFIG_PASSWORD = "Polpette12";
 
+// The password sent to the Worker when publishing/unpublishing puzzles. Same
+// value as CONFIG_PASSWORD by default (and as the Worker's CONFIG_PASSWORD
+// var); kept in sessionStorage so it can be overridden without a rebuild if
+// the shared password is ever rotated.
+function getConfigPassword() {
+  try {
+    return sessionStorage.getItem("puzzlelab_admin_password") || CONFIG_PASSWORD;
+  } catch (e) {
+    return CONFIG_PASSWORD;
+  }
+}
+
 function ConfigGate({ onUnlock }) {
   const [value, setValue] = useState("");
   const [wrong, setWrong] = useState(false);
@@ -3122,7 +3188,7 @@ function ConfigGate({ onUnlock }) {
   );
 }
 
-function PuzzleRow({ level, highlight, onEdit, onPlay }) {
+function PuzzleRow({ level, highlight, live, onEdit, onPlay, onUnpublish }) {
   return (
     <div
       className="flex items-center justify-between gap-2 rounded-md px-3 py-2"
@@ -3134,6 +3200,14 @@ function PuzzleRow({ level, highlight, onEdit, onPlay }) {
           {level.date && (
             <span className="ml-2" style={{ color: "#0d9488", fontFamily: "'DM Mono', monospace", fontSize: 11, fontWeight: 700 }}>
               {level.date}
+            </span>
+          )}
+          {live && (
+            <span
+              className="ml-2 px-1.5 rounded"
+              style={{ background: "#0d9488", color: "#fff", fontFamily: "'DM Mono', monospace", fontSize: 10, fontWeight: 700, letterSpacing: ".06em" }}
+            >
+              LIVE
             </span>
           )}
         </p>
@@ -3148,9 +3222,21 @@ function PuzzleRow({ level, highlight, onEdit, onPlay }) {
         >
           Play
         </button>
-        <button type="button" onClick={() => onEdit(level)} className="p-1.5 rounded" style={{ border: "1.5px solid #4b2e73", color: "#4b2e73" }}>
-          <Pencil className="w-3.5 h-3.5" />
-        </button>
+        {onEdit && (
+          <button type="button" onClick={() => onEdit(level)} className="p-1.5 rounded" style={{ border: "1.5px solid #4b2e73", color: "#4b2e73" }}>
+            <Pencil className="w-3.5 h-3.5" />
+          </button>
+        )}
+        {onUnpublish && (
+          <button
+            type="button"
+            onClick={() => onUnpublish(level)}
+            className="px-2 py-1 rounded text-xs"
+            style={{ background: "#ffd9d9", border: "1.5px solid #4b2e73", color: "#4b2e73", fontWeight: 800 }}
+          >
+            Unpublish
+          </button>
+        )}
       </div>
     </div>
   );
@@ -3164,7 +3250,43 @@ function PuzzleListScreen({ onEdit, onNew, onPlay, onBackToGames }) {
   const dated = BUILT_IN_LEVELS.filter((l) => l.date).slice().sort((a, b) => (a.date < b.date ? -1 : 1));
   const undated = BUILT_IN_LEVELS.filter((l) => !l.date);
   const today = amsterdamPuzzleDateStr();
-  const maxDated = dated.length ? dated[dated.length - 1].date : null;
+
+  // Puzzles published from here that live only in the backend (D1), not in
+  // this build. Fetched on mount and after every publish/unpublish.
+  const [published, setPublished] = useState([]);
+  const [pubError, setPubError] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    setPubError(false);
+    fetchPublishedPuzzles("defender")
+      .then((list) => { if (!cancelled) setPublished(list); })
+      .catch(() => { if (!cancelled) setPubError(true); });
+    return () => { cancelled = true; };
+  }, [reloadKey]);
+
+  const liveDates = new Set(published.map((p) => p.date));
+  const builtInDates = new Set(dated.map((l) => l.date));
+  const remoteOnly = published
+    .filter((p) => !builtInDates.has(p.date))
+    .slice()
+    .sort((a, b) => (a.date < b.date ? -1 : 1));
+
+  async function handleUnpublish(level) {
+    if (!window.confirm(`Unpublish the live puzzle for ${level.date}? Players will fall back to the built-in puzzle for that day.`)) return;
+    try {
+      await unpublishPuzzle(level.date, getConfigPassword(), "defender");
+      setReloadKey((k) => k + 1);
+    } catch (e) {
+      alert(`Unpublish failed: ${e.message || e}`);
+    }
+  }
+
+  // "Next puzzle needed" looks at both built-in dated puzzles and anything
+  // scheduled ahead via Publish, so publishing tomorrow's puzzle moves the marker.
+  const allDatedDates = [...dated.map((l) => l.date), ...published.map((p) => p.date)];
+  const maxDated = allDatedDates.length ? allDatedDates.reduce((a, b) => (a > b ? a : b)) : null;
   let nextNeeded = maxDated ? shiftDateStr(maxDated, 1) : today;
   if (nextNeeded < today) nextNeeded = today;
 
@@ -3183,7 +3305,15 @@ function PuzzleListScreen({ onEdit, onNew, onPlay, onBackToGames }) {
         </button>
       )}
       <h2 style={{ color: "#4b2e73", fontWeight: 800, fontSize: 20, marginBottom: 4 }}>Defender puzzle lab</h2>
-      <p style={{ color: "#a07fc4", fontFamily: "'DM Mono', monospace", fontSize: 12, marginBottom: 16 }}>{BUILT_IN_LEVELS.length} puzzles in this build.</p>
+      <p style={{ color: "#a07fc4", fontFamily: "'DM Mono', monospace", fontSize: 12, marginBottom: 4 }}>
+        {BUILT_IN_LEVELS.length} puzzles in this build · {published.length} published live
+      </p>
+      {pubError && (
+        <p style={{ color: "#dc2626", fontFamily: "'DM Mono', monospace", fontSize: 11, fontWeight: 700, marginBottom: 12 }}>
+          Couldn't reach the backend — LIVE status may be stale.
+        </p>
+      )}
+      {!pubError && <div style={{ marginBottom: 12 }} />}
 
       <div className="mb-5 p-3 rounded-lg" style={{ border: "2px solid #4b2e73", background: "#fff5b8" }}>
         <p style={{ color: "#4b2e73", fontFamily: "'DM Mono', monospace", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".05em", marginBottom: 4 }}>
@@ -3200,10 +3330,39 @@ function PuzzleListScreen({ onEdit, onNew, onPlay, onBackToGames }) {
         </button>
       </div>
 
+      {remoteOnly.length > 0 && (
+        <>
+          <p style={{ color: "#a07fc4", fontFamily: "'DM Mono', monospace", fontSize: 11, textTransform: "uppercase", letterSpacing: ".05em", marginBottom: 8 }}>
+            Live puzzles not in this build
+          </p>
+          <div className="space-y-2 mb-5">
+            {remoteOnly.map((lvl) => (
+              <PuzzleRow
+                key={lvl.id || lvl.date}
+                level={lvl}
+                highlight={lvl.date === today}
+                live
+                onEdit={onEdit}
+                onPlay={onPlay}
+                onUnpublish={handleUnpublish}
+              />
+            ))}
+          </div>
+        </>
+      )}
+
       <p style={{ color: "#a07fc4", fontFamily: "'DM Mono', monospace", fontSize: 11, textTransform: "uppercase", letterSpacing: ".05em", marginBottom: 8 }}>Dated puzzles</p>
       <div className="space-y-2 mb-5">
         {dated.map((lvl) => (
-          <PuzzleRow key={lvl.id} level={lvl} highlight={lvl.date === today} onEdit={onEdit} onPlay={onPlay} />
+          <PuzzleRow
+            key={lvl.id}
+            level={lvl}
+            highlight={lvl.date === today}
+            live={liveDates.has(lvl.date)}
+            onEdit={onEdit}
+            onPlay={onPlay}
+            onUnpublish={liveDates.has(lvl.date) ? handleUnpublish : null}
+          />
         ))}
       </div>
 
@@ -3221,9 +3380,9 @@ function PuzzleListScreen({ onEdit, onNew, onPlay, onBackToGames }) {
 
 // A trimmed copy of the level editor's drag-to-build screen (see
 // level-editor/puzzle-lab.jsx for the full version with the dev menu and
-// window.storage saving) — just enough to draft a new puzzle here and get
-// its JSON out. There's no live "Save": paste the exported JSON to Claude
-// Code to actually get it added to BUILT_IN_LEVELS and deployed.
+// window.storage saving) — just enough to draft a new puzzle here.
+// "Publish live" pushes it to the backend for its date (no deploy); "Copy
+// JSON" is for baking it permanently into BUILT_IN_LEVELS via Claude Code.
 function PuzzleEditorScreen({ initialLevel, onBack, onTest }) {
   const [draft, setDraft] = useState(() => {
     const lvl = clone(initialLevel);
@@ -3232,6 +3391,8 @@ function PuzzleEditorScreen({ initialLevel, onBack, onTest }) {
   });
   const [tool, setTool] = useState("wall");
   const [copyStatus, setCopyStatus] = useState("idle");
+  const [publishStatus, setPublishStatus] = useState("idle"); // idle | publishing | done | error
+  const [publishError, setPublishError] = useState("");
   const [aimDrag, setAimDrag] = useState(null);
   const [aimPreview, setAimPreview] = useState(null);
   const paintingRef = useRef(false);
@@ -3369,6 +3530,26 @@ function PuzzleEditorScreen({ initialLevel, onBack, onTest }) {
       setCopyStatus("error");
     }
     setTimeout(() => setCopyStatus("idle"), 2000);
+  }
+
+  async function handlePublish() {
+    if (!draft.date) return;
+    const msg =
+      `Publish "${draft.name || "Untitled"}" as the live puzzle for ${draft.date}?\n\n` +
+      `Players will get this puzzle on that date. Publishing again overwrites it. ` +
+      `Test-play it first to make sure it's solvable.`;
+    if (!window.confirm(msg)) return;
+    setPublishStatus("publishing");
+    setPublishError("");
+    try {
+      await publishPuzzle(draft, getConfigPassword(), "defender");
+      setPublishStatus("done");
+      setTimeout(() => setPublishStatus("idle"), 2500);
+    } catch (e) {
+      setPublishStatus("error");
+      setPublishError(e.message || "publish failed");
+      setTimeout(() => setPublishStatus("idle"), 4000);
+    }
   }
 
   const tiles = [];
@@ -3591,11 +3772,46 @@ function PuzzleEditorScreen({ initialLevel, onBack, onTest }) {
         </button>
       </div>
 
+      <div className="mt-2">
+        <button
+          type="button"
+          onClick={handlePublish}
+          disabled={!draft.date || publishStatus === "publishing"}
+          className="w-full"
+          style={{
+            padding: "10px 0",
+            borderRadius: 12,
+            border: "2.5px solid #4b2e73",
+            background: !draft.date ? "#f1e6ef" : publishStatus === "error" ? "#ffd9d9" : "#8ad7d2",
+            color: "#4b2e73",
+            fontWeight: 800,
+            fontSize: 14,
+            opacity: !draft.date ? 0.6 : 1,
+            cursor: !draft.date ? "not-allowed" : "pointer",
+          }}
+        >
+          {publishStatus === "publishing"
+            ? "Publishing…"
+            : publishStatus === "done"
+            ? "Published! ✓"
+            : publishStatus === "error"
+            ? "Publish failed"
+            : draft.date
+            ? `Publish live for ${draft.date}`
+            : "Publish live (set a date first)"}
+        </button>
+        {publishStatus === "error" && publishError && (
+          <p className="mt-1" style={{ color: "#dc2626", fontFamily: "'DM Mono', monospace", fontSize: 11, fontWeight: 700 }}>
+            {publishError}
+          </p>
+        )}
+      </div>
+
       <p className="mt-4" style={{ color: "#a07fc4", fontFamily: "'DM Mono', monospace", fontSize: 11 }}>
         Click a tile to place the selected tool. Click again to clear or replace it.
       </p>
       <p className="mt-1" style={{ color: "#a07fc4", fontFamily: "'DM Mono', monospace", fontSize: 11 }}>
-        "Copy JSON" is the only way this actually ships — paste it into a Claude Code conversation and ask it to add the level to BUILT_IN_LEVELS.
+        <strong>Publish live</strong> pushes this straight to the backend for its date — no code deploy, live within a minute. Test-play first. "Copy JSON" is still the way to bake a puzzle permanently into BUILT_IN_LEVELS via Claude Code.
       </p>
     </div>
   );
@@ -3642,6 +3858,15 @@ function GameHubScreen({ onSelect }) {
           <div>
             <p style={{ color: "#4b2e73", fontWeight: 800, fontSize: 16 }}>Xenoglyph</p>
             <p style={{ color: "#a07fc4", fontFamily: "'DM Mono', monospace", fontSize: 11 }}>{XENOGLYPH_SIGNALS.length} signals · pick one to test</p>
+          </div>
+        </button>
+        <button type="button" onClick={() => onSelect("sluice")} style={tileStyle}>
+          <div style={{ width: 40, height: 40, flex: "none", borderRadius: 10, border: "3px solid #4b2e73", background: "#6ec3e8", display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <span style={{ fontSize: 18 }}>💧</span>
+          </div>
+          <div>
+            <p style={{ color: "#4b2e73", fontWeight: 800, fontSize: 16 }}>Sluice</p>
+            <p style={{ color: "#a07fc4", fontFamily: "'DM Mono', monospace", fontSize: 11 }}>{SLUICE_LEVELS.length} levels · pick one to test</p>
           </div>
         </button>
       </div>
@@ -3704,6 +3929,54 @@ function XenoglyphSignalListScreen({ onBack, onPlay }) {
   );
 }
 
+// Sluice has no editor yet either — this just lists every level baked
+// into the build so any of them can be played on demand while testing,
+// regardless of which one today's date would actually pick.
+function SluiceLevelListScreen({ onBack, onPlay }) {
+  return (
+    <div
+      style={{ maxWidth: 480, margin: "0 auto", background: "#ffffff", border: "3px solid #4b2e73", borderRadius: 16, padding: 24, fontFamily: "'Baloo 2', system-ui, sans-serif" }}
+    >
+      <button
+        type="button"
+        onClick={onBack}
+        className="flex items-center gap-1 mb-3"
+        style={{ color: "#a07fc4", fontFamily: "'DM Mono', monospace", fontSize: 11, fontWeight: 700, background: "none", border: "none", padding: 0 }}
+      >
+        <ArrowLeft className="w-3.5 h-3.5" /> All games
+      </button>
+      <h2 style={{ color: "#4b2e73", fontWeight: 800, fontSize: 20, marginBottom: 4 }}>Sluice levels</h2>
+      <p style={{ color: "#a07fc4", fontFamily: "'DM Mono', monospace", fontSize: 12, marginBottom: 16 }}>
+        {SLUICE_LEVELS.length} levels in this build. Playing here never touches your real streak.
+      </p>
+      <div className="space-y-2">
+        {SLUICE_LEVELS.map((lvl, i) => (
+          <div
+            key={lvl.id}
+            className="flex items-center justify-between gap-2 rounded-md px-3 py-2"
+            style={{ border: "1.5px solid #e2c7d8", background: "#fff8fb" }}
+          >
+            <div className="min-w-0">
+              <p className="text-sm truncate" style={{ color: "#4b2e73", fontWeight: 800 }}>
+                #{i + 1} · {lvl.name}
+              </p>
+              {lvl.hint && <p className="text-xs truncate" style={{ color: "#a07fc4", fontFamily: "'DM Mono', monospace" }}>{lvl.hint}</p>}
+            </div>
+            <button
+              type="button"
+              onClick={() => onPlay(lvl)}
+              className="px-2 py-1 rounded text-xs shrink-0"
+              style={{ background: "#8ad7d2", border: "1.5px solid #4b2e73", color: "#4b2e73", fontWeight: 800 }}
+            >
+              Play
+            </button>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function ConfigApp() {
   const [unlocked, setUnlocked] = useState(() => {
     try {
@@ -3712,12 +3985,13 @@ function ConfigApp() {
       return false;
     }
   });
-  const [game, setGame] = useState(null); // null | "defender" | "xenoglyph"
+  const [game, setGame] = useState(null); // null | "defender" | "xenoglyph" | "sluice"
   const [screen, setScreen] = useState("list");
   const [editorInitial, setEditorInitial] = useState(null);
   const [activeLevel, setActiveLevel] = useState(null);
   const [playedFromEdit, setPlayedFromEdit] = useState(false);
   const [xgActiveSignal, setXgActiveSignal] = useState(null);
+  const [slActiveLevel, setSlActiveLevel] = useState(null);
 
   // #root is pinned to a fixed height with overflow:hidden (so the drag-driven
   // game itself never scrolls the page) — this screen needs its own explicit
@@ -3754,6 +4028,21 @@ function ConfigApp() {
     return (
       <div style={outerStyle}>
         <XenoglyphSignalListScreen onBack={() => setGame(null)} onPlay={setXgActiveSignal} />
+      </div>
+    );
+  }
+
+  if (game === "sluice") {
+    if (slActiveLevel) {
+      return (
+        <div style={outerStyle}>
+          <SluiceApp level={slActiveLevel} onBack={() => setSlActiveLevel(null)} />
+        </div>
+      );
+    }
+    return (
+      <div style={outerStyle}>
+        <SluiceLevelListScreen onBack={() => setGame(null)} onPlay={setSlActiveLevel} />
       </div>
     );
   }
@@ -4051,30 +4340,70 @@ function DailyGamesHome() {
 // The actual Defender game — lives at /defenders. dailygiu.com's root is now
 // the ecosystem hub (DailyGamesHome); this used to be what rendered there
 // before the site grew a second (placeholder) game.
+//
+// Before the board can render we need the published-puzzle list from the
+// Worker (a published puzzle for today overrides the built-in one). If that
+// fetch fails or is slow, we deliberately do NOT fall back to a built-in
+// puzzle — we bounce back to the menu, so nobody ever plays a puzzle that
+// isn't the real one for the day.
 function DefenderApp() {
-  const { level, dayNumber } = pickDailyLevel(BUILT_IN_LEVELS, LAUNCH_DATE);
+  const [phase, setPhase] = useState({ status: "loading", levels: null });
+
+  useEffect(() => {
+    let cancelled = false;
+    const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error("timeout")), 2500));
+    Promise.race([fetchPublishedPuzzles("defender"), timeout])
+      .then((published) => {
+        if (cancelled) return;
+        setPhase({ status: "ready", levels: mergeLevels(BUILT_IN_LEVELS, published) });
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setPhase({ status: "error", levels: null });
+        setTimeout(() => { window.location.href = "/"; }, 1600);
+      });
+    return () => { cancelled = true; };
+  }, []);
+
+  if (phase.status !== "ready") {
+    return (
+      <div style={defenderBackdropStyle(false, "center")}>
+        <p style={{ color: "#a07fc4", fontFamily: "'DM Mono', monospace", fontWeight: 700, fontSize: 13, letterSpacing: ".04em" }}>
+          {phase.status === "loading" ? "loading today's puzzle…" : "couldn't load today's puzzle — back to menu…"}
+        </p>
+      </div>
+    );
+  }
+
+  return <DefenderPlay levels={phase.levels} />;
+}
+
+function defenderBackdropStyle(showResults, justify) {
+  return {
+    height: "100dvh",
+    overflow: showResults ? "auto" : "hidden",
+    backgroundColor: "#ffe9f3",
+    backgroundImage: "linear-gradient(#ffffff 2px, transparent 2px), linear-gradient(90deg, #ffffff 2px, transparent 2px)",
+    backgroundSize: "36px 36px",
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    justifyContent: justify,
+    paddingTop: 24,
+    paddingBottom: 24,
+    fontFamily: "'Baloo 2', system-ui, sans-serif",
+  };
+}
+
+function DefenderPlay({ levels }) {
+  const { level, dayNumber } = pickDailyLevel(levels, LAUNCH_DATE);
   // The board is a fixed size, so it looks best vertically centered — but
   // the leaderboard's length varies (and can run longer than the screen),
   // so once results are showing the page switches to top-aligned +
   // scrollable instead of centering (and clipping) a growing list.
   const [showResults, setShowResults] = useState(hasWonToday());
   return (
-    <div
-      style={{
-        height: "100dvh",
-        overflow: showResults ? "auto" : "hidden",
-        backgroundColor: "#ffe9f3",
-        backgroundImage: "linear-gradient(#ffffff 2px, transparent 2px), linear-gradient(90deg, #ffffff 2px, transparent 2px)",
-        backgroundSize: "36px 36px",
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        justifyContent: showResults ? "flex-start" : "center",
-        paddingTop: 24,
-        paddingBottom: 24,
-        fontFamily: "'Baloo 2', system-ui, sans-serif",
-      }}
-    >
+    <div style={defenderBackdropStyle(showResults, showResults ? "flex-start" : "center")}>
       <p
         style={{ color: "#a07fc4", fontFamily: "'DM Mono', monospace", fontWeight: 700, fontSize: 12, letterSpacing: ".08em", marginBottom: 8 }}
       >

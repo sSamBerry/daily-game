@@ -2,6 +2,13 @@ name = "daily-giu-leaderboard"
 main = "src/index.js"
 compatibility_date = "2024-09-23"
 
+# Shared password for publishing puzzles from /config. This is the same value
+# that's already in the client bundle (CONFIG_PASSWORD in DailyPuzzle.jsx) — it
+# only gates casual writes, not a real secret. To rotate it, change it in both
+# places and redeploy (`npx wrangler deploy`).
+[vars]
+CONFIG_PASSWORD = "Polpette12"
+
 [[d1_databases]]
 binding = "DB"
 database_name = "daily-giu-leaderboard"

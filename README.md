@@ -18,34 +18,44 @@ level-editor/          ← NOT deployed — a design tool for making new puzzles
   puzzle-lab.jsx        ← full version with the menu + level editor
   README.md             ← how to use it
 
-worker/                 ← the leaderboard backend, deployed separately (see below)
-  src/index.js           ← Cloudflare Worker: POST /api/score, GET /api/leaderboard
-  schema.sql              ← D1 table definition
-  wrangler.toml           ← Worker + D1 binding config
+worker/                 ← the backend, deployed separately (see below)
+  src/index.js           ← Cloudflare Worker: /api/score, /api/leaderboard, /api/puzzles
+  schema.sql              ← D1 table definitions (scores + puzzles)
+  wrangler.toml           ← Worker + D1 binding config, CONFIG_PASSWORD var
 ```
 
 Netlify only ever builds `src/DailyPuzzle.jsx` (via `npm run build` at the
 repo root, per `netlify.toml`). The `level-editor/` folder is just sitting
 in the repo for your own reference — it's never bundled into the live site.
 
-## Workflow for adding new puzzles (with Claude Code)
+## Workflow for adding new puzzles (normal path — no code push)
 
-1. **Design the level.** Either use `level-editor/puzzle-lab.jsx` as a
-   Claude.ai artifact to visually build and test a level (see
-   `level-editor/README.md`), or just describe the puzzle you want in plain
-   English to Claude Code and let it write the level JSON directly.
-2. **Ask Claude Code to add it.** With this folder open in Claude Code,
-   something like: *"Add a new level to `src/DailyPuzzle.jsx`'s
-   BUILT_IN_LEVELS array: a Pusher and a Rotator, two enemies, one
-   building..."* — Claude Code edits the file directly.
-3. **Test locally** (optional but recommended):
-   ```
-   npm install
-   npm run dev
-   ```
-4. **Commit and push** — via GitHub Desktop, or ask Claude Code to do it
-   for you (`git add`, `git commit`, `git push`). Netlify picks it up
-   automatically within a minute or two.
+Since the backend can store puzzles, the day-to-day flow doesn't touch code:
+
+1. Go to **`/config`** on the live site (or locally), unlock with the
+   password, pick **Defender**.
+2. Hit **New puzzle for `<date>`**, paint the board, set the hint.
+3. **Test play** it — make sure it's actually solvable.
+4. **Publish live for `<date>`**. It's written straight to the backend and
+   the game serves it on that date, live within a minute. No commit, no
+   deploy.
+
+The puzzle list in `/config` shows a **LIVE** pill on every date that has a
+published puzzle, plus an **Unpublish** button (which reverts that date to
+the built-in puzzle). Puzzles you published for dates that aren't in the
+build at all show up under "Live puzzles not in this build".
+
+> A published puzzle for a date always wins over the built-in puzzle for
+> that date. If the backend is unreachable when a player opens
+> `/defenders`, the game shows a brief "couldn't load" and sends them back
+> to the menu rather than serving a wrong puzzle — so keep the Worker up.
+
+### Making a puzzle a permanent part of the build (still via Claude Code)
+
+Publishing lives only in the backend D1. To bake a puzzle into the shipped
+code (so it survives even without the backend), use **Copy JSON** in the
+editor and ask Claude Code to add it to `BUILT_IN_LEVELS` in
+`src/DailyPuzzle.jsx`, then commit and push as before.
 
 ## Setting up this folder as your repo
 
@@ -134,17 +144,38 @@ streak. That's fine for a v1 launch (this is exactly how most daily-puzzle
 games start), but if you want cross-device streaks later, that needs a real
 backend + login, which is a separate, bigger project.
 
-## Leaderboard backend (Cloudflare Worker + D1)
+## Backend (Cloudflare Worker + D1)
 
-Daily solve times go to a small Cloudflare Worker at
+A small Cloudflare Worker at
 `daily-giu-leaderboard.samberry3522.workers.dev`, backed by a D1 (SQLite)
-table — this is separate from the GitHub Pages static site and has its own
-deploy step. No login: each player is a random id + a chosen nickname, both
-saved in `localStorage` (see `getOrCreateAnonId` / `getNickname` in
-`src/DailyPuzzle.jsx`).
+database — separate from the static site, with its own deploy step. It now
+does two things:
 
-**To change the Worker's behavior** (e.g. edit `worker/src/index.js` or
-`worker/schema.sql`):
+- **Leaderboard** — `GET /api/leaderboard`, `POST /api/score`. No login:
+  each player is a random id + a chosen nickname, both saved in
+  `localStorage` (see `getOrCreateAnonId` / `getNickname` in
+  `src/DailyPuzzle.jsx`).
+- **Published puzzles** — `GET /api/puzzles` (public; the game fetches this
+  on load), `POST /api/puzzles` and `POST /api/puzzles/delete` (publish /
+  unpublish from `/config`). Writes are gated by `CONFIG_PASSWORD`, a
+  `[vars]` entry in `wrangler.toml` that must match the `CONFIG_PASSWORD`
+  constant in `src/DailyPuzzle.jsx`. It's the same value that's already in
+  the client bundle — casual-write protection, not real auth.
+
+### One-time setup for the puzzle-publishing feature
+
+```
+cd worker
+npx wrangler d1 execute daily-giu-leaderboard --remote --file schema.sql   # creates the `puzzles` table
+npx wrangler deploy                                                        # ships the new endpoints + CONFIG_PASSWORD
+```
+
+Then push the frontend once so the live site gets the Publish button and
+the fetch-on-load. **That's the last push needed for puzzle content** — from
+then on, Publish in `/config` handles new puzzles with no deploy.
+
+**To change the Worker's behavior later** (e.g. edit `worker/src/index.js`
+or `worker/schema.sql`):
 
 ```
 cd worker
