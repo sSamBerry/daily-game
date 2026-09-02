@@ -3852,8 +3852,8 @@ function GameHubScreen({ onSelect }) {
           </div>
         </button>
         <button type="button" onClick={() => onSelect("sheep")} style={tileStyle}>
-          <div style={{ width: 40, height: 40, flex: "none", borderRadius: 12, border: "3px solid #4b2e73", background: "#fff5b8", display: "flex", alignItems: "center", justifyContent: "center" }}>
-            <span style={{ fontSize: 22 }}>🐑</span>
+          <div style={{ width: 40, height: 40, flex: "none", borderRadius: 12, border: "3px solid #4b2e73", background: "#fdecc8", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
+            <img src="/sheep.png" alt="" style={{ width: "86%", height: "86%", objectFit: "contain" }} />
           </div>
           <div>
             <p style={{ color: "#4b2e73", fontWeight: 800, fontSize: 16 }}>Sheep</p>

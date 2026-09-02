@@ -127,6 +127,16 @@ function ringKeep(x0, y0, x1, y1, keep) {
   return ringPath(x0, y0, x1, y1).filter((_, i) => keep(i));
 }
 
+// A scattered puzzle: a few fence bits sitting at chosen points around an
+// (invisible) pen outline `rect`, plus loose decoy posts off it. The player
+// joins them into a closed pen — there's never most of a box already built.
+function scatterPuzzle(id, name, date, rect, keepIdx, decoys, sheep, budget) {
+  const keep = new Set(keepIdx);
+  const [x0, y0, x1, y1] = rect;
+  return { id, name, date, sheep, budget, walls: [...ringKeep(x0, y0, x1, y1, (i) => keep.has(i)), ...decoys] };
+}
+const P = (x, y) => ({ x, y });
+
 // The undated rotation — used only after the scheduled puzzles run out (or as
 // filler if the backend is empty). Every puzzle is sealable within its budget
 // with room to spare; verified by the node harness in this repo.
@@ -147,33 +157,32 @@ const ROTATION = [
   { id: "sheep-sandwich", name: "Sandwich", walls: [...line(3, 3, 8, 3), ...line(3, 8, 8, 8)], sheep: { x: 5, y: 5 }, budget: 12 },
 ];
 
-// Scheduled daily puzzles — Sept 3 2026 onward. These are editable and
-// re-publishable from /config exactly like Defender's dated levels; a puzzle
+// Scheduled daily puzzles — Sept 3 2026 onward. All deliberately sparse and
+// abstract: scattered fence bits + loose posts, never a half-built box. Every
+// one is sealable within its budget (verified by the node harness). Editable
+// and re-publishable from /config like Defender's dated levels — a puzzle
 // published to the backend for one of these dates overrides the entry here.
 const SCHEDULED = [
-  { id: "sheep-2026-09-03", name: "Half Fence", date: "2026-09-03",
-    walls: ringKeep(3, 3, 8, 8, (i) => i % 5 < 3), sheep: { x: 6, y: 6 }, budget: 12 },
-  { id: "sheep-2026-09-04", name: "Dashed Paddock", date: "2026-09-04",
-    walls: ringKeep(2, 2, 9, 9, (i) => i % 2 === 0), sheep: { x: 6, y: 6 }, budget: 16 },
-  { id: "sheep-2026-09-05", name: "Long Yard", date: "2026-09-05",
-    walls: ringKeep(2, 3, 9, 8, (i) => i % 3 !== 2), sheep: { x: 5, y: 5 }, budget: 12 },
-  { id: "sheep-2026-09-06", name: "Twin Rails", date: "2026-09-06",
-    walls: [...line(3, 2, 3, 9), ...line(8, 2, 8, 9)], sheep: { x: 5, y: 5 }, budget: 14 },
-  { id: "sheep-2026-09-07", name: "Broken Ring", date: "2026-09-07",
-    walls: ringKeep(1, 2, 10, 9, (i) => i % 4 < 3), sheep: { x: 5, y: 5 }, budget: 12 },
-  { id: "sheep-2026-09-08", name: "Corner Start", date: "2026-09-08",
-    walls: ringPath(2, 2, 8, 8).slice(13), sheep: { x: 4, y: 5 }, budget: 16 },
-  { id: "sheep-2026-09-09", name: "Scatter Field", date: "2026-09-09",
-    walls: ringKeep(3, 2, 9, 9, (i) => i % 3 !== 0), sheep: { x: 6, y: 6 }, budget: 12 },
-  { id: "sheep-2026-09-10", name: "Fence Posts", date: "2026-09-10",
-    walls: [
-      { x: 3, y: 3 }, { x: 8, y: 3 }, { x: 3, y: 8 }, { x: 8, y: 8 },
-      { x: 6, y: 3 }, { x: 6, y: 8 }, { x: 3, y: 6 }, { x: 8, y: 6 }],
-    sheep: { x: 6, y: 6 }, budget: 14 },
-  { id: "sheep-2026-09-11", name: "Big Field", date: "2026-09-11",
-    walls: ringKeep(1, 1, 10, 10, (i) => i % 3 !== 0), sheep: { x: 5, y: 5 }, budget: 14 },
-  { id: "sheep-2026-09-12", name: "Nearly Sealed", date: "2026-09-12",
-    walls: ringKeep(2, 2, 9, 9, (i) => i % 7 !== 0), sheep: { x: 5, y: 5 }, budget: 8 },
+  scatterPuzzle("sheep-2026-09-03", "Handful", "2026-09-03",
+    [3, 3, 8, 8], [0, 3, 7, 10, 13, 17], [P(1, 7)], P(6, 6), 16),
+  scatterPuzzle("sheep-2026-09-04", "Loose Ends", "2026-09-04",
+    [2, 3, 8, 8], [0, 4, 8, 11, 15, 19], [P(10, 2), P(2, 10)], P(5, 5), 16),
+  scatterPuzzle("sheep-2026-09-05", "Odd Posts", "2026-09-05",
+    [3, 3, 9, 8], [1, 5, 9, 12, 16, 20], [P(2, 10)], P(6, 5), 16),
+  scatterPuzzle("sheep-2026-09-06", "Scattergun", "2026-09-06",
+    [3, 3, 8, 8], [2, 5, 8, 11, 14, 17], [P(1, 4), P(10, 8)], P(6, 6), 16),
+  scatterPuzzle("sheep-2026-09-07", "Sparse", "2026-09-07",
+    [4, 4, 8, 8], [0, 4, 8, 12], [P(2, 6), P(9, 3)], P(6, 6), 16),
+  scatterPuzzle("sheep-2026-09-08", "Drift", "2026-09-08",
+    [2, 4, 8, 9], [0, 4, 8, 12, 16, 20], [P(5, 1)], P(5, 6), 16),
+  scatterPuzzle("sheep-2026-09-09", "Confetti", "2026-09-09",
+    [3, 3, 8, 8], [1, 4, 7, 10, 13, 16], [P(1, 1), P(10, 10), P(1, 10)], P(6, 6), 16),
+  scatterPuzzle("sheep-2026-09-10", "Four Marks", "2026-09-10",
+    [4, 3, 9, 8], [0, 5, 10, 15], [P(2, 5), P(11, 6)], P(6, 5), 16),
+  scatterPuzzle("sheep-2026-09-11", "Wide Scatter", "2026-09-11",
+    [2, 4, 9, 8], [0, 4, 8, 11, 15, 19], [P(5, 10)], P(5, 6), 16),
+  scatterPuzzle("sheep-2026-09-12", "Almost Bare", "2026-09-12",
+    [4, 4, 8, 8], [0, 6, 11], [P(2, 2), P(10, 10)], P(6, 6), 16),
 ];
 
 export const SHEEP_LEVELS = [...SCHEDULED, ...ROTATION];
@@ -473,7 +482,7 @@ function SheepRulesModal({ onClose }) {
         </SheepRuleRow>
 
         <SheepRuleRow title="Your fences" swatch={swBox("#8a63c9", { boxShadow: "inset 0 0 0 2px #4b2e73" })}>
-          Tap an empty square to drop one; tap it to pick it back up. "Fences left" shows how many you still have to spend — you don't have to use them all.
+          Tap an empty square to drop one; tap it to pick it back up. The 🧱 pill shows how many you have left — you don't have to use them all.
         </SheepRuleRow>
 
         <SheepRuleRow title="Fixed fences" swatch={swBox("#4b2e73")}>
@@ -683,27 +692,27 @@ function SheepPlayScreen({ puzzle, dayNumber, isDaily = false, onShowResults, on
         </button>
       </div>
 
-      <h2 style={{ color: "#4b2e73", fontWeight: 800, fontSize: 20, marginBottom: 4 }}>{puzzle.name}</h2>
-
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 10,
-          margin: "0 0 10px",
-          padding: "8px 12px",
-          borderRadius: 10,
-          border: "2px solid #4b2e73",
-          background: wallsLeft === 0 ? "#ffe3e3" : "#fff5b8",
-        }}
-      >
-        <span style={{ fontFamily: MONO, fontSize: 10, fontWeight: 700, letterSpacing: ".1em", textTransform: "uppercase", color: "#4b2e73" }}>
-          Fences left
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, margin: "0 0 10px" }}>
+        <h2 style={{ color: "#4b2e73", fontWeight: 800, fontSize: 20 }}>{puzzle.name}</h2>
+        <span
+          style={{
+            flex: "none",
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 6,
+            fontFamily: MONO,
+            fontWeight: 800,
+            fontSize: 14,
+            color: wallsLeft === 0 ? "#dc2626" : "#4b2e73",
+            background: wallsLeft === 0 ? "#ffe3e3" : "#fff5b8",
+            border: "2px solid #4b2e73",
+            borderRadius: 999,
+            padding: "4px 12px",
+            fontVariantNumeric: "tabular-nums",
+          }}
+        >
+          🧱 {wallsLeft} left
         </span>
-        <span style={{ fontFamily: MONO, fontWeight: 800, fontSize: 24, lineHeight: 1, color: wallsLeft === 0 ? "#dc2626" : "#4b2e73", fontVariantNumeric: "tabular-nums" }}>
-          {wallsLeft}
-        </span>
-        <span style={{ fontFamily: MONO, fontSize: 13, fontWeight: 700, color: "#a07fc4" }}>of {puzzle.budget}</span>
       </div>
 
       <SheepBoard
