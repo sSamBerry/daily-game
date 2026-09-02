@@ -1,7 +1,5 @@
 import { useState, useEffect, useRef } from "react";
 import { RotateCcw, RotateCw, Magnet, Hand, Info, X, ArrowLeft, Plus, Trash2, Pencil, Eraser } from "lucide-react";
-import XenoglyphApp, { XENOGLYPH_SIGNALS } from "./Xenoglyph.jsx";
-import SluiceApp, { SLUICE_LEVELS } from "./Sluice.jsx";
 
 const SIZE = 8;
 
@@ -3246,7 +3244,7 @@ function PuzzleRow({ level, highlight, live, onEdit, onPlay, onUnpublish }) {
 // "next puzzle needed" date — one day after whichever dated puzzle is
 // scheduled furthest out (or today, if none are scheduled ahead) — so it's
 // obvious what to build next without cross-checking the calendar by hand.
-function PuzzleListScreen({ onEdit, onNew, onPlay, onBackToGames }) {
+function PuzzleListScreen({ onEdit, onNew, onPlay }) {
   const dated = BUILT_IN_LEVELS.filter((l) => l.date).slice().sort((a, b) => (a.date < b.date ? -1 : 1));
   const undated = BUILT_IN_LEVELS.filter((l) => !l.date);
   const today = amsterdamPuzzleDateStr();
@@ -3294,16 +3292,6 @@ function PuzzleListScreen({ onEdit, onNew, onPlay, onBackToGames }) {
     <div
       style={{ maxWidth: 480, margin: "0 auto", background: "#ffffff", border: "3px solid #4b2e73", borderRadius: 16, padding: 24, fontFamily: "'Baloo 2', system-ui, sans-serif" }}
     >
-      {onBackToGames && (
-        <button
-          type="button"
-          onClick={onBackToGames}
-          className="flex items-center gap-1 mb-3"
-          style={{ color: "#a07fc4", fontFamily: "'DM Mono', monospace", fontSize: 11, fontWeight: 700, background: "none", border: "none", padding: 0 }}
-        >
-          <ArrowLeft className="w-3.5 h-3.5" /> All games
-        </button>
-      )}
       <h2 style={{ color: "#4b2e73", fontWeight: 800, fontSize: 20, marginBottom: 4 }}>Defender puzzle lab</h2>
       <p style={{ color: "#a07fc4", fontFamily: "'DM Mono', monospace", fontSize: 12, marginBottom: 4 }}>
         {BUILT_IN_LEVELS.length} puzzles in this build · {published.length} published live
@@ -3817,166 +3805,6 @@ function PuzzleEditorScreen({ initialLevel, onBack, onTest }) {
   );
 }
 
-// Landing screen inside the puzzle lab once unlocked — picks which game's
-// test tools to open. Defender keeps its existing list/edit/play screens;
-// Xenoglyph gets a simpler "pick any signal, play it" list below, since it
-// has no level editor of its own yet.
-function GameHubScreen({ onSelect }) {
-  const tileStyle = {
-    display: "flex",
-    alignItems: "center",
-    gap: 12,
-    padding: "16px 18px",
-    borderRadius: 14,
-    border: "2.5px solid #4b2e73",
-    background: "#fff8fb",
-    textAlign: "left",
-    width: "100%",
-  };
-  return (
-    <div
-      style={{ maxWidth: 480, margin: "0 auto", background: "#ffffff", border: "3px solid #4b2e73", borderRadius: 16, padding: 24, fontFamily: "'Baloo 2', system-ui, sans-serif" }}
-    >
-      <h2 style={{ color: "#4b2e73", fontWeight: 800, fontSize: 20, marginBottom: 4 }}>Puzzle lab</h2>
-      <p style={{ color: "#a07fc4", fontFamily: "'DM Mono', monospace", fontSize: 12, marginBottom: 16 }}>Pick a game to test.</p>
-      <div className="flex flex-col gap-3">
-        <button type="button" onClick={() => onSelect("defender")} style={tileStyle}>
-          <div style={{ width: 40, height: 40, flex: "none", borderRadius: "50%", border: "3px solid #4b2e73", background: "#8ad7d2", display: "flex", alignItems: "center", justifyContent: "center" }}>
-            <div style={{ width: 16, height: 16, border: "3px solid #4b2e73", borderRadius: "50%", background: "#fff5b8" }} />
-          </div>
-          <div>
-            <p style={{ color: "#4b2e73", fontWeight: 800, fontSize: 16 }}>Defender</p>
-            <p style={{ color: "#a07fc4", fontFamily: "'DM Mono', monospace", fontSize: 11 }}>{BUILT_IN_LEVELS.length} puzzles · has an editor</p>
-          </div>
-        </button>
-        <button type="button" onClick={() => onSelect("xenoglyph")} style={tileStyle}>
-          <div style={{ width: 40, height: 40, flex: "none", borderRadius: 12, border: "3px solid #4b2e73", background: "#f5eefc", display: "flex", alignItems: "center", justifyContent: "center" }}>
-            <span style={{ fontFamily: "'Noto Sans Old North Arabian', 'Baloo 2', serif", fontSize: 20, color: "#4b2e73" }}>
-              {XENOGLYPH_SIGNALS[0].vocabulary[0].glyph}
-            </span>
-          </div>
-          <div>
-            <p style={{ color: "#4b2e73", fontWeight: 800, fontSize: 16 }}>Xenoglyph</p>
-            <p style={{ color: "#a07fc4", fontFamily: "'DM Mono', monospace", fontSize: 11 }}>{XENOGLYPH_SIGNALS.length} signals · pick one to test</p>
-          </div>
-        </button>
-        <button type="button" onClick={() => onSelect("sluice")} style={tileStyle}>
-          <div style={{ width: 40, height: 40, flex: "none", borderRadius: 10, border: "3px solid #4b2e73", background: "#6ec3e8", display: "flex", alignItems: "center", justifyContent: "center" }}>
-            <span style={{ fontSize: 18 }}>💧</span>
-          </div>
-          <div>
-            <p style={{ color: "#4b2e73", fontWeight: 800, fontSize: 16 }}>Sluice</p>
-            <p style={{ color: "#a07fc4", fontFamily: "'DM Mono', monospace", fontSize: 11 }}>{SLUICE_LEVELS.length} levels · pick one to test</p>
-          </div>
-        </button>
-      </div>
-    </div>
-  );
-}
-
-// Xenoglyph has no editor yet — this just lists every signal baked into the
-// build so any of them can be played on demand while testing, regardless of
-// which one today's date would actually pick.
-function XenoglyphSignalListScreen({ onBack, onPlay }) {
-  return (
-    <div
-      style={{ maxWidth: 480, margin: "0 auto", background: "#ffffff", border: "3px solid #4b2e73", borderRadius: 16, padding: 24, fontFamily: "'Baloo 2', system-ui, sans-serif" }}
-    >
-      <button
-        type="button"
-        onClick={onBack}
-        className="flex items-center gap-1 mb-3"
-        style={{ color: "#a07fc4", fontFamily: "'DM Mono', monospace", fontSize: 11, fontWeight: 700, background: "none", border: "none", padding: 0 }}
-      >
-        <ArrowLeft className="w-3.5 h-3.5" /> All games
-      </button>
-      <h2 style={{ color: "#4b2e73", fontWeight: 800, fontSize: 20, marginBottom: 4 }}>Xenoglyph signals</h2>
-      <p style={{ color: "#a07fc4", fontFamily: "'DM Mono', monospace", fontSize: 12, marginBottom: 16 }}>
-        {XENOGLYPH_SIGNALS.length} signals in this build. Playing here never touches your real streak.
-      </p>
-      <div className="space-y-2">
-        {XENOGLYPH_SIGNALS.map((sig, i) => (
-          <div
-            key={sig.id}
-            className="flex items-center justify-between gap-2 rounded-md px-3 py-2"
-            style={{ border: "1.5px solid #e2c7d8", background: "#fff8fb" }}
-          >
-            <div className="min-w-0 flex items-center gap-2">
-              <span style={{ fontFamily: "'Noto Sans Old North Arabian', 'Baloo 2', serif", fontSize: 20, color: "#4b2e73", flex: "none" }}>
-                {sig.vocabulary[0].glyph}
-              </span>
-              <div className="min-w-0">
-                <p className="text-sm truncate" style={{ color: "#4b2e73", fontWeight: 800 }}>
-                  #{i + 1} · {sig.headline}
-                </p>
-                <p className="text-xs truncate" style={{ color: "#a07fc4", fontFamily: "'DM Mono', monospace" }}>
-                  {sig.vocabulary.map((v) => v.meaning).join(", ")}
-                </p>
-              </div>
-            </div>
-            <button
-              type="button"
-              onClick={() => onPlay(sig)}
-              className="px-2 py-1 rounded text-xs shrink-0"
-              style={{ background: "#8ad7d2", border: "1.5px solid #4b2e73", color: "#4b2e73", fontWeight: 800 }}
-            >
-              Play
-            </button>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-// Sluice has no editor yet either — this just lists every level baked
-// into the build so any of them can be played on demand while testing,
-// regardless of which one today's date would actually pick.
-function SluiceLevelListScreen({ onBack, onPlay }) {
-  return (
-    <div
-      style={{ maxWidth: 480, margin: "0 auto", background: "#ffffff", border: "3px solid #4b2e73", borderRadius: 16, padding: 24, fontFamily: "'Baloo 2', system-ui, sans-serif" }}
-    >
-      <button
-        type="button"
-        onClick={onBack}
-        className="flex items-center gap-1 mb-3"
-        style={{ color: "#a07fc4", fontFamily: "'DM Mono', monospace", fontSize: 11, fontWeight: 700, background: "none", border: "none", padding: 0 }}
-      >
-        <ArrowLeft className="w-3.5 h-3.5" /> All games
-      </button>
-      <h2 style={{ color: "#4b2e73", fontWeight: 800, fontSize: 20, marginBottom: 4 }}>Sluice levels</h2>
-      <p style={{ color: "#a07fc4", fontFamily: "'DM Mono', monospace", fontSize: 12, marginBottom: 16 }}>
-        {SLUICE_LEVELS.length} levels in this build. Playing here never touches your real streak.
-      </p>
-      <div className="space-y-2">
-        {SLUICE_LEVELS.map((lvl, i) => (
-          <div
-            key={lvl.id}
-            className="flex items-center justify-between gap-2 rounded-md px-3 py-2"
-            style={{ border: "1.5px solid #e2c7d8", background: "#fff8fb" }}
-          >
-            <div className="min-w-0">
-              <p className="text-sm truncate" style={{ color: "#4b2e73", fontWeight: 800 }}>
-                #{i + 1} · {lvl.name}
-              </p>
-              {lvl.hint && <p className="text-xs truncate" style={{ color: "#a07fc4", fontFamily: "'DM Mono', monospace" }}>{lvl.hint}</p>}
-            </div>
-            <button
-              type="button"
-              onClick={() => onPlay(lvl)}
-              className="px-2 py-1 rounded text-xs shrink-0"
-              style={{ background: "#8ad7d2", border: "1.5px solid #4b2e73", color: "#4b2e73", fontWeight: 800 }}
-            >
-              Play
-            </button>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
 function ConfigApp() {
   const [unlocked, setUnlocked] = useState(() => {
     try {
@@ -3985,13 +3813,10 @@ function ConfigApp() {
       return false;
     }
   });
-  const [game, setGame] = useState(null); // null | "defender" | "xenoglyph" | "sluice"
   const [screen, setScreen] = useState("list");
   const [editorInitial, setEditorInitial] = useState(null);
   const [activeLevel, setActiveLevel] = useState(null);
   const [playedFromEdit, setPlayedFromEdit] = useState(false);
-  const [xgActiveSignal, setXgActiveSignal] = useState(null);
-  const [slActiveLevel, setSlActiveLevel] = useState(null);
 
   // #root is pinned to a fixed height with overflow:hidden (so the drag-driven
   // game itself never scrolls the page) — this screen needs its own explicit
@@ -4008,44 +3833,6 @@ function ConfigApp() {
   };
 
   if (!unlocked) return <ConfigGate onUnlock={() => setUnlocked(true)} />;
-
-  if (!game) {
-    return (
-      <div style={outerStyle}>
-        <GameHubScreen onSelect={setGame} />
-      </div>
-    );
-  }
-
-  if (game === "xenoglyph") {
-    if (xgActiveSignal) {
-      return (
-        <div style={outerStyle}>
-          <XenoglyphApp signal={xgActiveSignal} onBack={() => setXgActiveSignal(null)} />
-        </div>
-      );
-    }
-    return (
-      <div style={outerStyle}>
-        <XenoglyphSignalListScreen onBack={() => setGame(null)} onPlay={setXgActiveSignal} />
-      </div>
-    );
-  }
-
-  if (game === "sluice") {
-    if (slActiveLevel) {
-      return (
-        <div style={outerStyle}>
-          <SluiceApp level={slActiveLevel} onBack={() => setSlActiveLevel(null)} />
-        </div>
-      );
-    }
-    return (
-      <div style={outerStyle}>
-        <SluiceLevelListScreen onBack={() => setGame(null)} onPlay={setSlActiveLevel} />
-      </div>
-    );
-  }
 
   if (screen === "play" && activeLevel) {
     return (
@@ -4091,7 +3878,6 @@ function ConfigApp() {
           setPlayedFromEdit(false);
           setScreen("play");
         }}
-        onBackToGames={() => setGame(null)}
       />
     </div>
   );
@@ -4429,8 +4215,6 @@ export default function DailyPuzzleApp() {
   const pathname = typeof window !== "undefined" ? window.location.pathname : "/";
   if (pathname === "/config") return <ConfigApp />;
   if (pathname === "/defenders") return <DefenderApp />;
-  // Xenoglyph has no public route — it's not ready to ship, so it's only
-  // reachable from inside /config's puzzle lab for testing.
   // Everything else (the root "/", the old "/home" link, any typo'd path —
   // GitHub Pages' 404.html fallback routes all of those through this same
   // app) lands on the ecosystem hub, which is now the actual landing page.
