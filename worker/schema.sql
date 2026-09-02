@@ -20,3 +20,17 @@ CREATE TABLE IF NOT EXISTS puzzles (
   updated_at INTEGER NOT NULL,
   PRIMARY KEY (game, date)
 );
+
+-- Generic daily leaderboard for games where higher is better (Sheep: most
+-- tiles penned in). Defender keeps its own `scores` table (lower time wins).
+CREATE TABLE IF NOT EXISTS game_scores (
+  game         TEXT NOT NULL,
+  date         TEXT NOT NULL,
+  anon_id      TEXT NOT NULL,
+  name         TEXT NOT NULL,
+  score        INTEGER NOT NULL,
+  submitted_at INTEGER NOT NULL,
+  PRIMARY KEY (game, date, anon_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_game_scores ON game_scores (game, date, score DESC);

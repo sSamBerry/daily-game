@@ -22,8 +22,9 @@ function json(data, status, origin) {
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const MAX_NAME_LEN = 20;
 const MAX_TIME_MS = 24 * 60 * 60 * 1000;
-const KNOWN_GAMES = new Set(["defender"]);
+const KNOWN_GAMES = new Set(["defender", "sheep"]);
 const MAX_PUZZLE_BYTES = 20000;
+const MAX_SHEEP_SCORE = 16 * 16; // generous ceiling; the board is smaller than this
 
 function cleanName(raw) {
   const trimmed = String(raw ?? "").trim().slice(0, MAX_NAME_LEN);
@@ -125,13 +126,15 @@ async function handlePostPuzzle(request, env, origin) {
   if (!level || typeof level !== "object" || Array.isArray(level)) {
     return json({ error: "invalid level" }, 400, origin);
   }
-  for (const field of ["units", "enemies", "buildings", "walls"]) {
+  const game = cleanGame(rawGame);
+  const requiredArrays =
+    game === "defender" ? ["units", "enemies", "buildings", "walls"] : ["walls"];
+  for (const field of requiredArrays) {
     if (!Array.isArray(level[field])) {
       return json({ error: `level.${field} must be an array` }, 400, origin);
     }
   }
 
-  const game = cleanGame(rawGame);
   const stored = {
     ...level,
     date,
@@ -174,6 +177,67 @@ async function handleDeletePuzzle(request, env, origin) {
   return json({ ok: true }, 200, origin);
 }
 
+// Sheep leaderboard: highest score (most tiles penned in) for the day wins,
+// ties broken by who got there first. Stored in the generic `game_scores`
+// table, separate from Defender's time-based `scores`.
+async function handleGetSheepLeaderboard(request, env, origin) {
+  const url = new URL(request.url);
+  const date = url.searchParams.get("date");
+  const anonId = url.searchParams.get("anonId") || "";
+  if (!date || !DATE_RE.test(date)) return json({ error: "invalid date" }, 400, origin);
+
+  const { results } = await env.DB.prepare(
+    "SELECT anon_id, name, score FROM game_scores WHERE game = 'sheep' AND date = ? ORDER BY score DESC, submitted_at ASC LIMIT 50"
+  )
+    .bind(date)
+    .all();
+
+  const entries = results.map((row, i) => ({
+    rank: i + 1,
+    name: row.name,
+    score: row.score,
+    isYou: row.anon_id === anonId,
+  }));
+
+  return json({ date, entries }, 200, origin);
+}
+
+async function handlePostSheepScore(request, env, origin) {
+  let body;
+  try {
+    body = await request.json();
+  } catch (e) {
+    return json({ error: "invalid json" }, 400, origin);
+  }
+
+  const { date, anonId, name, score } = body || {};
+  if (!date || !DATE_RE.test(date)) return json({ error: "invalid date" }, 400, origin);
+  if (!anonId || typeof anonId !== "string" || anonId.length > 64) {
+    return json({ error: "invalid anonId" }, 400, origin);
+  }
+  if (!Number.isInteger(score) || score < 0 || score > MAX_SHEEP_SCORE) {
+    return json({ error: "invalid score" }, 400, origin);
+  }
+
+  const safeName = cleanName(name);
+  const now = Date.now();
+
+  // Keep the best score per player per day; only refresh name/timestamp when
+  // this submission actually beats the stored one.
+  await env.DB.prepare(
+    `INSERT INTO game_scores (game, date, anon_id, name, score, submitted_at)
+     VALUES ('sheep', ?, ?, ?, ?, ?)
+     ON CONFLICT(game, date, anon_id) DO UPDATE SET
+       name = CASE WHEN excluded.score > game_scores.score THEN excluded.name ELSE game_scores.name END,
+       submitted_at = CASE WHEN excluded.score > game_scores.score THEN excluded.submitted_at ELSE game_scores.submitted_at END,
+       score = MAX(game_scores.score, excluded.score)`
+  )
+    .bind(date, anonId, safeName, score, now)
+    .run();
+
+  return json({ ok: true }, 200, origin);
+}
+
 export default {
   async fetch(request, env) {
     const origin = request.headers.get("Origin") || "";
@@ -197,6 +261,12 @@ export default {
     }
     if (url.pathname === "/api/puzzles/delete" && request.method === "POST") {
       return handleDeletePuzzle(request, env, origin);
+    }
+    if (url.pathname === "/api/sheep/leaderboard" && request.method === "GET") {
+      return handleGetSheepLeaderboard(request, env, origin);
+    }
+    if (url.pathname === "/api/sheep/score" && request.method === "POST") {
+      return handlePostSheepScore(request, env, origin);
     }
 
     return json({ error: "not found" }, 404, origin);

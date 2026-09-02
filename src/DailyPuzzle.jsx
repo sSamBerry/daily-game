@@ -1,15 +1,22 @@
 import { useState, useEffect, useRef } from "react";
 import { RotateCcw, RotateCw, Magnet, Hand, Info, X, ArrowLeft, Plus, Trash2, Pencil, Eraser } from "lucide-react";
+import SheepApp, {
+  SheepConfigApp,
+  SHEEP_LEVELS,
+  SHEEP_LAUNCH_DATE,
+  getSheepStreak,
+  sheepHasPlayedToday,
+} from "./Sheep.jsx";
 
 const SIZE = 8;
 
-function clone(s) {
+export function clone(s) {
   return JSON.parse(JSON.stringify(s));
 }
 function key(x, y) {
   return x + "," + y;
 }
-function uid(prefix) {
+export function uid(prefix) {
   return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
 }
 function blankLevel() {
@@ -21,7 +28,7 @@ function blankLevel() {
 // published puzzles for brand-new dates are just added. Undated built-in
 // (rotation) puzzles are always kept. `pickDailyLevel` then applies its usual
 // "dated puzzle for today wins, else cycle the undated list" rule.
-function mergeLevels(builtIn, published) {
+export function mergeLevels(builtIn, published) {
   const pubDates = new Set((published || []).map((p) => p.date));
   return [...builtIn.filter((l) => !l.date || !pubDates.has(l.date)), ...(published || [])];
 }
@@ -1072,9 +1079,9 @@ function hasWonToday() {
 // Leaderboard: no accounts, just a random per-device id (paired with a
 // player-chosen name) so the same person can update their time without a
 // login. The backend is a small Cloudflare Worker + D1 table — see worker/.
-const LEADERBOARD_API = "https://daily-giu-leaderboard.samberry3522.workers.dev";
+export const LEADERBOARD_API = "https://daily-giu-leaderboard.samberry3522.workers.dev";
 
-function getOrCreateAnonId() {
+export function getOrCreateAnonId() {
   try {
     let id = localStorage.getItem("puzzlelab_anon_id");
     if (!id) {
@@ -1087,7 +1094,7 @@ function getOrCreateAnonId() {
   }
 }
 
-function getNickname() {
+export function getNickname() {
   try {
     return localStorage.getItem("puzzlelab_nickname") || "";
   } catch (e) {
@@ -1095,7 +1102,7 @@ function getNickname() {
   }
 }
 
-function saveNickname(name) {
+export function saveNickname(name) {
   try {
     localStorage.setItem("puzzlelab_nickname", name);
   } catch (e) {
@@ -1163,7 +1170,7 @@ async function fetchLeaderboard(date) {
 // Fetch every published puzzle for a game. Rejects (rather than returning [])
 // on network/HTTP failure so the caller can tell "backend down" from
 // "nothing published yet".
-async function fetchPublishedPuzzles(game = "defender") {
+export async function fetchPublishedPuzzles(game = "defender") {
   const res = await fetch(`${LEADERBOARD_API}/api/puzzles?game=${encodeURIComponent(game)}`);
   if (!res.ok) throw new Error(`puzzles fetch failed: ${res.status}`);
   const data = await res.json();
@@ -1173,7 +1180,7 @@ async function fetchPublishedPuzzles(game = "defender") {
   });
 }
 
-async function publishPuzzle(level, password, game = "defender") {
+export async function publishPuzzle(level, password, game = "defender") {
   const res = await fetch(`${LEADERBOARD_API}/api/puzzles`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -1184,7 +1191,7 @@ async function publishPuzzle(level, password, game = "defender") {
   return data;
 }
 
-async function unpublishPuzzle(date, password, game = "defender") {
+export async function unpublishPuzzle(date, password, game = "defender") {
   const res = await fetch(`${LEADERBOARD_API}/api/puzzles/delete`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -1687,7 +1694,7 @@ function formatElapsed(totalSeconds) {
 // Shown once, the first time a player wants to see the leaderboard — asks
 // for the name their times will show under. Saved locally and reused for
 // every future submission, no account involved.
-function NicknamePrompt({ onSave, initial = "", title = "Pick a name", onClose }) {
+export function NicknamePrompt({ onSave, initial = "", title = "Pick a name", onClose }) {
   const [value, setValue] = useState(initial);
   return (
     <div
@@ -3081,7 +3088,7 @@ export function dayIndexSince(launchDateStr) {
   return Math.max(0, diffDays);
 }
 
-function pickDailyLevel(levels, launchDateStr) {
+export function pickDailyLevel(levels, launchDateStr) {
   const dayIndex = dayIndexSince(launchDateStr);
   const dayNumber = dayIndex + 1;
   // A level authored with a `date` (set in the Puzzle Lab editor) always wins
@@ -3108,7 +3115,7 @@ const CONFIG_PASSWORD = "Polpette12";
 // value as CONFIG_PASSWORD by default (and as the Worker's CONFIG_PASSWORD
 // var); kept in sessionStorage so it can be overridden without a rebuild if
 // the shared password is ever rotated.
-function getConfigPassword() {
+export function getConfigPassword() {
   try {
     return sessionStorage.getItem("puzzlelab_admin_password") || CONFIG_PASSWORD;
   } catch (e) {
@@ -3244,7 +3251,7 @@ function PuzzleRow({ level, highlight, live, onEdit, onPlay, onUnpublish }) {
 // "next puzzle needed" date — one day after whichever dated puzzle is
 // scheduled furthest out (or today, if none are scheduled ahead) — so it's
 // obvious what to build next without cross-checking the calendar by hand.
-function PuzzleListScreen({ onEdit, onNew, onPlay }) {
+function PuzzleListScreen({ onEdit, onNew, onPlay, onBackToGames }) {
   const dated = BUILT_IN_LEVELS.filter((l) => l.date).slice().sort((a, b) => (a.date < b.date ? -1 : 1));
   const undated = BUILT_IN_LEVELS.filter((l) => !l.date);
   const today = amsterdamPuzzleDateStr();
@@ -3292,6 +3299,16 @@ function PuzzleListScreen({ onEdit, onNew, onPlay }) {
     <div
       style={{ maxWidth: 480, margin: "0 auto", background: "#ffffff", border: "3px solid #4b2e73", borderRadius: 16, padding: 24, fontFamily: "'Baloo 2', system-ui, sans-serif" }}
     >
+      {onBackToGames && (
+        <button
+          type="button"
+          onClick={onBackToGames}
+          className="flex items-center gap-1 mb-3"
+          style={{ color: "#a07fc4", fontFamily: "'DM Mono', monospace", fontSize: 11, fontWeight: 700, background: "none", border: "none", padding: 0, cursor: "pointer" }}
+        >
+          <ArrowLeft className="w-3.5 h-3.5" /> All games
+        </button>
+      )}
       <h2 style={{ color: "#4b2e73", fontWeight: 800, fontSize: 20, marginBottom: 4 }}>Defender puzzle lab</h2>
       <p style={{ color: "#a07fc4", fontFamily: "'DM Mono', monospace", fontSize: 12, marginBottom: 4 }}>
         {BUILT_IN_LEVELS.length} puzzles in this build · {published.length} published live
@@ -3805,6 +3822,49 @@ function PuzzleEditorScreen({ initialLevel, onBack, onTest }) {
   );
 }
 
+// Landing screen inside the puzzle lab once unlocked — pick which game's
+// puzzles to work on. Each game keeps its own list / editor / test-play flow.
+function GameHubScreen({ onSelect }) {
+  const tileStyle = {
+    display: "flex",
+    alignItems: "center",
+    gap: 12,
+    padding: "16px 18px",
+    borderRadius: 14,
+    border: "2.5px solid #4b2e73",
+    background: "#fff8fb",
+    textAlign: "left",
+    width: "100%",
+    cursor: "pointer",
+  };
+  return (
+    <div style={{ maxWidth: 480, margin: "0 auto", background: "#ffffff", border: "3px solid #4b2e73", borderRadius: 16, padding: 24, fontFamily: "'Baloo 2', system-ui, sans-serif" }}>
+      <h2 style={{ color: "#4b2e73", fontWeight: 800, fontSize: 20, marginBottom: 4 }}>Puzzle lab</h2>
+      <p style={{ color: "#a07fc4", fontFamily: "'DM Mono', monospace", fontSize: 12, marginBottom: 16 }}>Pick a game.</p>
+      <div className="flex flex-col gap-3">
+        <button type="button" onClick={() => onSelect("defender")} style={tileStyle}>
+          <div style={{ width: 40, height: 40, flex: "none", borderRadius: "50%", border: "3px solid #4b2e73", background: "#8ad7d2", display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <div style={{ width: 16, height: 16, border: "3px solid #4b2e73", borderRadius: "50%", background: "#fff5b8" }} />
+          </div>
+          <div>
+            <p style={{ color: "#4b2e73", fontWeight: 800, fontSize: 16 }}>Defender</p>
+            <p style={{ color: "#a07fc4", fontFamily: "'DM Mono', monospace", fontSize: 11 }}>{BUILT_IN_LEVELS.length} built-in puzzles</p>
+          </div>
+        </button>
+        <button type="button" onClick={() => onSelect("sheep")} style={tileStyle}>
+          <div style={{ width: 40, height: 40, flex: "none", borderRadius: 12, border: "3px solid #4b2e73", background: "#fff5b8", display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <span style={{ fontSize: 22 }}>🐑</span>
+          </div>
+          <div>
+            <p style={{ color: "#4b2e73", fontWeight: 800, fontSize: 16 }}>Sheep</p>
+            <p style={{ color: "#a07fc4", fontFamily: "'DM Mono', monospace", fontSize: 11 }}>{SHEEP_LEVELS.length} built-in puzzles</p>
+          </div>
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function ConfigApp() {
   const [unlocked, setUnlocked] = useState(() => {
     try {
@@ -3813,6 +3873,7 @@ function ConfigApp() {
       return false;
     }
   });
+  const [game, setGame] = useState(null); // null | "defender" | "sheep"
   const [screen, setScreen] = useState("list");
   const [editorInitial, setEditorInitial] = useState(null);
   const [activeLevel, setActiveLevel] = useState(null);
@@ -3833,6 +3894,22 @@ function ConfigApp() {
   };
 
   if (!unlocked) return <ConfigGate onUnlock={() => setUnlocked(true)} />;
+
+  if (!game) {
+    return (
+      <div style={outerStyle}>
+        <GameHubScreen onSelect={setGame} />
+      </div>
+    );
+  }
+
+  if (game === "sheep") {
+    return (
+      <div style={outerStyle}>
+        <SheepConfigApp onBackToGames={() => setGame(null)} />
+      </div>
+    );
+  }
 
   if (screen === "play" && activeLevel) {
     return (
@@ -3878,6 +3955,7 @@ function ConfigApp() {
           setPlayedFromEdit(false);
           setScreen("play");
         }}
+        onBackToGames={() => setGame(null)}
       />
     </div>
   );
@@ -4005,6 +4083,11 @@ function DailyGamesHome() {
   const defenderWonToday = hasWonToday();
   const { dayNumber: defenderPuzzleNumber } = pickDailyLevel(BUILT_IN_LEVELS, LAUNCH_DATE);
 
+  const sheepStreak = getSheepStreak();
+  const sheepPlayedToday = sheepHasPlayedToday();
+  const sheepLocked = amsterdamPuzzleDateStr() < SHEEP_LAUNCH_DATE;
+  const { dayNumber: sheepPuzzleNumber } = pickDailyLevel(SHEEP_LEVELS, SHEEP_LAUNCH_DATE);
+
   // Name shown on the leaderboard lives in localStorage; normally it's only
   // asked for the first time you open results. This little button lets you
   // change it from the hub without having to win a puzzle first.
@@ -4107,6 +4190,29 @@ function DailyGamesHome() {
             streakBg="#fff5b8"
             onPlay={() => {
               window.location.href = "/defenders";
+            }}
+          />
+          <GameCard
+            gameNo="02"
+            chromeColor="#8ad7d2"
+            squareColors={["#ffb3d0", "#fff5b8"]}
+            iconBg="#fdecc8"
+            iconRadius="14px"
+            iconInner={<img src="/sheep.png" alt="" style={{ width: "86%", height: "86%", objectFit: "contain" }} />}
+            name="Sheep"
+            tagline={
+              sheepLocked
+                ? "new game — unlocks tomorrow, 9am"
+                : sheepPlayedToday
+                ? "see today's results"
+                : "pen the sheep in"
+            }
+            puzzleNumber={sheepLocked ? undefined : sheepPuzzleNumber}
+            streak={sheepStreak}
+            streakBg="#8ad7d2"
+            comingSoon={sheepLocked}
+            onPlay={() => {
+              window.location.href = "/sheep";
             }}
           />
         </div>
@@ -4215,6 +4321,7 @@ export default function DailyPuzzleApp() {
   const pathname = typeof window !== "undefined" ? window.location.pathname : "/";
   if (pathname === "/config") return <ConfigApp />;
   if (pathname === "/defenders") return <DefenderApp />;
+  if (pathname === "/sheep") return <SheepApp />;
   // Everything else (the root "/", the old "/home" link, any typo'd path —
   // GitHub Pages' 404.html fallback routes all of those through this same
   // app) lands on the ecosystem hub, which is now the actual landing page.

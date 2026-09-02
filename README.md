@@ -9,7 +9,8 @@ push to `main`.
 
 ```
 /                     ← the actual deployed site (Netlify builds from here)
-  src/DailyPuzzle.jsx ← the game, player-only, picks today's puzzle by date
+  src/DailyPuzzle.jsx ← core: Defender game + routing + /config + home hub
+  src/Sheep.jsx        ← Sheep game (the /sheep route + its /config lab)
   src/main.jsx
   index.html
   package.json / package-lock.json / vite.config.js / netlify.toml
@@ -19,10 +20,22 @@ level-editor/          ← NOT deployed — a design tool for making new puzzles
   README.md             ← how to use it
 
 worker/                 ← the backend, deployed separately (see below)
-  src/index.js           ← Cloudflare Worker: /api/score, /api/leaderboard, /api/puzzles
-  schema.sql              ← D1 table definitions (scores + puzzles)
+  src/index.js           ← Cloudflare Worker: /api/score, /api/leaderboard,
+                            /api/puzzles, /api/sheep/*
+  schema.sql              ← D1 tables (scores + puzzles + game_scores)
   wrangler.toml           ← Worker + D1 binding config, CONFIG_PASSWORD var
 ```
+
+## The two games
+
+| Game     | Route        | Board  | Goal                                   | Leaderboard      |
+|----------|--------------|--------|----------------------------------------|------------------|
+| Defender | `/defenders` | 8×8    | keep all buildings standing            | fastest solve    |
+| Sheep    | `/sheep`     | 16×16  | seal the biggest pen around the sheep  | most tiles penned|
+
+Both pick today's puzzle by date, take backend-published puzzles as overrides,
+have their own local streak, and are authored in `/config` (pick the game on
+the lab's landing screen). The home hub (`/`) shows a card per game.
 
 Netlify only ever builds `src/DailyPuzzle.jsx` (via `npm run build` at the
 repo root, per `netlify.toml`). The `level-editor/` folder is just sitting
@@ -33,9 +46,11 @@ in the repo for your own reference — it's never bundled into the live site.
 Since the backend can store puzzles, the day-to-day flow doesn't touch code:
 
 1. Go to **`/config`** on the live site (or locally), unlock with the
-   password, pick **Defender**.
-2. Hit **New puzzle for `<date>`**, paint the board, set the hint.
-3. **Test play** it — make sure it's actually solvable.
+   password, pick **Defender** or **Sheep**.
+2. Hit **New puzzle for `<date>`**, build the board, set the hint (and, for
+   Sheep, the wall budget).
+3. **Test play** it — make sure it's solvable (for Sheep: sealable within
+   budget, with room to spare).
 4. **Publish live for `<date>`**. It's written straight to the backend and
    the game serves it on that date, live within a minute. No commit, no
    deploy.
@@ -148,31 +163,31 @@ backend + login, which is a separate, bigger project.
 
 A small Cloudflare Worker at
 `daily-giu-leaderboard.samberry3522.workers.dev`, backed by a D1 (SQLite)
-database — separate from the static site, with its own deploy step. It now
-does two things:
+database — separate from the static site, with its own deploy step. It does:
 
-- **Leaderboard** — `GET /api/leaderboard`, `POST /api/score`. No login:
-  each player is a random id + a chosen nickname, both saved in
-  `localStorage` (see `getOrCreateAnonId` / `getNickname` in
-  `src/DailyPuzzle.jsx`).
-- **Published puzzles** — `GET /api/puzzles` (public; the game fetches this
-  on load), `POST /api/puzzles` and `POST /api/puzzles/delete` (publish /
-  unpublish from `/config`). Writes are gated by `CONFIG_PASSWORD`, a
+- **Defender leaderboard** — `GET /api/leaderboard`, `POST /api/score`
+  (`scores` table, fastest time wins). No login: each player is a random id
+  + a chosen nickname in `localStorage` (`getOrCreateAnonId` / `getNickname`
+  in `src/DailyPuzzle.jsx`).
+- **Sheep leaderboard** — `GET /api/sheep/leaderboard`, `POST /api/sheep/score`
+  (`game_scores` table, highest score wins). Same anon id / nickname.
+- **Published puzzles** — `GET /api/puzzles?game=` (public; each game fetches
+  this on load), `POST /api/puzzles` and `POST /api/puzzles/delete` (publish
+  / unpublish from `/config`). Writes are gated by `CONFIG_PASSWORD`, a
   `[vars]` entry in `wrangler.toml` that must match the `CONFIG_PASSWORD`
-  constant in `src/DailyPuzzle.jsx`. It's the same value that's already in
-  the client bundle — casual-write protection, not real auth.
+  constant in `src/DailyPuzzle.jsx` — the same value that's already in the
+  client bundle, casual-write protection, not real auth.
 
-### One-time setup for the puzzle-publishing feature
+### One-time setup after changing `schema.sql` / adding a game
 
 ```
 cd worker
-npx wrangler d1 execute daily-giu-leaderboard --remote --file schema.sql   # creates the `puzzles` table
-npx wrangler deploy                                                        # ships the new endpoints + CONFIG_PASSWORD
+npx wrangler d1 execute daily-giu-leaderboard --remote --file schema.sql   # idempotent — creates any missing tables
+npx wrangler deploy                                                        # ships index.js + CONFIG_PASSWORD
 ```
 
-Then push the frontend once so the live site gets the Publish button and
-the fetch-on-load. **That's the last push needed for puzzle content** — from
-then on, Publish in `/config` handles new puzzles with no deploy.
+Then push the frontend once. After that, new puzzles for either game go
+through **Publish** in `/config` with no deploy.
 
 **To change the Worker's behavior later** (e.g. edit `worker/src/index.js`
 or `worker/schema.sql`):
